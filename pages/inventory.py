@@ -1,15 +1,17 @@
 import streamlit as st
 from data_manager import DataManager
 from barcode_handler import BarcodeHandler
+from user_management import login_required
 
+@login_required
 def render_inventory_page():
     st.title("Inventory Management")
-    
+
     tab1, tab2 = st.tabs(["View Inventory", "Add New Part"])
-    
+
     with tab1:
         df = st.session_state.data_manager.get_all_parts()
-        
+
         # Search and filter
         search_term = st.text_input("Search parts by name or number")
         if search_term:
@@ -17,19 +19,19 @@ def render_inventory_page():
                 df['name'].str.contains(search_term, case=False) |
                 df['part_number'].str.contains(search_term, case=False)
             ]
-        
+
         st.dataframe(
             df[['part_number', 'name', 'quantity', 'min_order_level', 'barcode']],
             hide_index=True
         )
-        
+
         # Edit part
         if not df.empty:
             part_to_edit = st.selectbox(
                 "Select part to edit",
                 df['name'].tolist()
             )
-            
+
             if part_to_edit:
                 part_data = df[df['name'] == part_to_edit].iloc[0]
                 with st.form("edit_part_form"):
@@ -48,7 +50,7 @@ def render_inventory_page():
                         value=int(part_data['min_order_quantity']),
                         min_value=1
                     )
-                    
+
                     if st.form_submit_button("Update Part"):
                         st.session_state.data_manager.update_spare_part(
                             part_data['id'],
@@ -62,7 +64,7 @@ def render_inventory_page():
                         )
                         st.success("Part updated successfully!")
                         st.rerun()
-    
+
     with tab2:
         with st.form("add_part_form"):
             part_number = st.text_input("Part Number")
@@ -71,7 +73,7 @@ def render_inventory_page():
             quantity = st.number_input("Initial Quantity", min_value=0)
             min_order_level = st.number_input("Minimum Order Level", min_value=0)
             min_order_quantity = st.number_input("Minimum Order Quantity", min_value=1)
-            
+
             if st.form_submit_button("Add Part"):
                 if part_number and name:
                     barcode = st.session_state.barcode_handler.generate_unique_barcode()
@@ -84,7 +86,7 @@ def render_inventory_page():
                         'min_order_quantity': min_order_quantity,
                         'barcode': barcode
                     })
-                    
+
                     if success:
                         st.success("Part added successfully!")
                         st.markdown(f"Generated barcode: `{barcode}`")

@@ -5,7 +5,9 @@ from utils import (
     calculate_reorder_point,
     calculate_stock_turnover
 )
+from user_management import login_required
 
+@login_required
 def render_analytics_page():
     st.title("Advanced Analytics and Forecasting")
 
