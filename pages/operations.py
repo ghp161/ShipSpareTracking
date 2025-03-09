@@ -1,9 +1,19 @@
 import streamlit as st
 from data_manager import DataManager
+from barcode_handler import BarcodeHandler
 from user_management import login_required
+from datetime import datetime
 
 @login_required
 def render_operations_page():
+    # Initialize session state if needed
+    if 'data_manager' not in st.session_state:
+        st.session_state.data_manager = DataManager()
+    if 'barcode_handler' not in st.session_state:
+        st.session_state.barcode_handler = BarcodeHandler() # Assuming BarcodeHandler is defined elsewhere
+    if 'last_scans' not in st.session_state:
+        st.session_state.last_scans = []
+
     st.title("Operations")
 
     tab1, tab2, tab3 = st.tabs(["Barcode Scanner", "Check-In/Check-Out", "Issue Parts"])
@@ -62,6 +72,7 @@ def render_operations_page():
                                 quantity
                             )
                             st.success(f"Successfully {action.lower()}ed {quantity} units")
+                            st.session_state.last_scans.append(f"{datetime.now().strftime('%H:%M:%S')} - {part['name']}")
                             st.rerun()
                     else:
                         st.error("Barcode not found in system")
@@ -70,9 +81,6 @@ def render_operations_page():
 
         with col2:
             st.markdown("### Last Scanned")
-            if 'last_scans' not in st.session_state:
-                st.session_state.last_scans = []
-
             for scan in st.session_state.last_scans[-5:]:
                 st.text(scan)
 
