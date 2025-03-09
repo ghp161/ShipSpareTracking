@@ -18,6 +18,10 @@ if 'data_manager' not in st.session_state:
 if 'barcode_handler' not in st.session_state:
     st.session_state.barcode_handler = BarcodeHandler()
 
+# Initialize alerts in session state
+if 'alerts' not in st.session_state:
+    st.session_state.alerts = []
+
 @login_required
 def main():
     st.title("Ship Inventory Management System")
@@ -26,6 +30,20 @@ def main():
     with st.sidebar:
         st.write(f"Logged in as: {st.session_state.username}")
         st.write(f"Role: {st.session_state.user_role}")
+
+        # Alert Section in Sidebar
+        low_stock = st.session_state.data_manager.get_low_stock_items()
+        if not low_stock.empty:
+            st.error(f"🚨 {len(low_stock)} items below minimum stock level!")
+            with st.expander("View Low Stock Alerts"):
+                for _, item in low_stock.iterrows():
+                    st.warning(f"""
+                        **{item['name']}**
+                        - Current: {item['quantity']}
+                        - Minimum: {item['min_order_level']}
+                        - Order Quantity: {item['min_order_quantity']}
+                    """)
+
         if st.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.username = None
@@ -38,14 +56,43 @@ def main():
     with col1:
         st.subheader("Inventory Overview")
         df = st.session_state.data_manager.get_all_parts()
-        st.metric("Total Parts", len(df))
-        st.metric("Low Stock Items", len(st.session_state.data_manager.get_low_stock_items()))
+        total_parts = len(df)
+        low_stock_count = len(low_stock)
+
+        st.metric(
+            "Total Parts",
+            total_parts,
+            help="Total number of unique parts in inventory"
+        )
+        st.metric(
+            "Low Stock Items",
+            low_stock_count,
+            delta=low_stock_count,
+            delta_color="inverse",
+            help="Number of items below minimum order level"
+        )
 
     with col2:
         st.subheader("Quick Actions")
         if st.button("View Low Stock Items"):
             low_stock = st.session_state.data_manager.get_low_stock_items()
-            st.dataframe(low_stock[['name', 'part_number', 'quantity', 'min_order_level']])
+            if not low_stock.empty:
+                st.dataframe(
+                    low_stock[['name', 'part_number', 'quantity', 'min_order_level']],
+                    hide_index=True
+                )
+
+                # Download low stock report
+                csv = low_stock.to_csv(index=False)
+                st.download_button(
+                    "Download Low Stock Report",
+                    csv,
+                    "low_stock_report.csv",
+                    "text/csv",
+                    help="Download a CSV report of all low stock items"
+                )
+            else:
+                st.success("All items are above minimum stock levels")
 
     # Recent Transactions
     st.subheader("Recent Transactions")
