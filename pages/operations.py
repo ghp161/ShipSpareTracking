@@ -84,21 +84,26 @@ def render_operations_page():
 
                         if st.button(f"Confirm {action}"):
                             transaction_type = 'check_in' if action == "Check In" else 'check_out'
-                            st.session_state.data_manager.record_transaction(
+                            success, error_msg = st.session_state.data_manager.record_transaction(
                                 part['id'],
                                 transaction_type,
                                 quantity
                             )
-                            st.success(f"Successfully {action.lower()}ed {quantity} units")
 
-                            # Check if action triggered low stock alert
-                            if action == "Check Out":
-                                updated_part = st.session_state.data_manager.get_part_by_id(part['id']).iloc[0]
-                                if updated_part['quantity'] <= updated_part['min_order_level']:
-                                    st.warning(f"⚠️ Stock Alert: {updated_part['name']} is now below minimum stock level!")
+                            if success:
+                                st.success(f"Successfully {action.lower()}ed {quantity} units")
 
-                            st.session_state.last_scans.append(f"{datetime.now().strftime('%H:%M:%S')} - {part['name']}")
-                            st.rerun()
+                                # Check if action triggered low stock alert
+                                updated_df = st.session_state.data_manager.get_part_by_id(part['id'])
+                                if updated_df is not None and not updated_df.empty:
+                                    updated_part = updated_df.iloc[0]
+                                    if updated_part['quantity'] <= updated_part['min_order_level']:
+                                        st.warning(f"⚠️ Stock Alert: {updated_part['name']} is now below minimum stock level!")
+
+                                st.session_state.last_scans.append(f"{datetime.now().strftime('%H:%M:%S')} - {part['name']}")
+                                st.rerun()
+                            else:
+                                st.error(f"Transaction failed: {error_msg}")
                     else:
                         st.error("Barcode not found in system")
                 else:
@@ -139,13 +144,16 @@ def render_operations_page():
                     )
 
                     if st.form_submit_button("Check-In"):
-                        st.session_state.data_manager.record_transaction(
+                        success, error_msg = st.session_state.data_manager.record_transaction(
                             part_data['id'],
                             'check_in',
                             check_in_quantity
                         )
-                        st.success(f"Checked in {check_in_quantity} units")
-                        st.rerun()
+                        if success:
+                            st.success(f"Checked in {check_in_quantity} units")
+                            st.rerun()
+                        else:
+                            st.error(f"Transaction failed: {error_msg}")
 
             with col2:
                 with st.form("check_out_form"):
@@ -158,19 +166,25 @@ def render_operations_page():
                     )
 
                     if st.form_submit_button("Check-Out"):
-                        st.session_state.data_manager.record_transaction(
+                        success, error_msg = st.session_state.data_manager.record_transaction(
                             part_data['id'],
                             'check_out',
                             check_out_quantity
                         )
-                        st.success(f"Checked out {check_out_quantity} units")
 
-                        # Check if this transaction triggered a low stock alert
-                        updated_part = st.session_state.data_manager.get_part_by_id(part_data['id']).iloc[0]
-                        if updated_part['quantity'] <= updated_part['min_order_level']:
-                            st.warning(f"⚠️ Stock Alert: {updated_part['name']} is now below minimum stock level!")
+                        if success:
+                            st.success(f"Checked out {check_out_quantity} units")
 
-                        st.rerun()
+                            # Check if this transaction triggered a low stock alert
+                            updated_df = st.session_state.data_manager.get_part_by_id(part_data['id'])
+                            if updated_df is not None and not updated_df.empty:
+                                updated_part = updated_df.iloc[0]
+                                if updated_part['quantity'] <= updated_part['min_order_level']:
+                                    st.warning(f"⚠️ Stock Alert: {updated_part['name']} is now below minimum stock level!")
+
+                            st.rerun()
+                        else:
+                            st.error(f"Transaction failed: {error_msg}")
 
     with tab3:
         low_stock = st.session_state.data_manager.get_low_stock_items()

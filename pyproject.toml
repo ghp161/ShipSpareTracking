@@ -5,9 +5,11 @@ description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
     "barcode>=1.0.4",
+    "numpy>=2.2.3",
     "pandas>=2.2.3",
     "pillow>=11.1.0",
     "plotly>=6.0.0",
     "python-barcode>=0.15.1",
     "streamlit>=1.43.1",
+    "trafilatura>=2.0.0",
 ]

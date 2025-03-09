@@ -91,11 +91,15 @@ class DataManager:
 
     def get_part_by_id(self, part_id):
         try:
-            return pd.read_sql_query("SELECT * FROM spare_parts WHERE id=?", 
-                                    self.conn, params=[part_id])
+            df = pd.read_sql_query("SELECT * FROM spare_parts WHERE id=?", 
+                                self.conn, params=[part_id])
+            if df.empty:
+                print(f"No part found with ID {part_id}")
+                return None
+            return df
         except pd.io.sql.DatabaseError as e:
             print(f"Error retrieving part {part_id}: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_low_stock_items(self):
         try:
@@ -110,21 +114,37 @@ class DataManager:
     def record_transaction(self, part_id, transaction_type, quantity):
         cursor = self.conn.cursor()
         try:
+            # First verify the part exists and has enough stock
+            part_df = self.get_part_by_id(part_id)
+            if part_df is None or part_df.empty:
+                raise ValueError(f"Part with ID {part_id} not found")
+
+            part = part_df.iloc[0]
+            current_quantity = int(part['quantity'])
+
+            if transaction_type == 'check_out' and current_quantity < quantity:
+                raise ValueError(f"Insufficient stock. Available: {current_quantity}, Requested: {quantity}")
+
+            # Record the transaction
             cursor.execute('''
                 INSERT INTO transactions (part_id, transaction_type, quantity, timestamp)
                 VALUES (?, ?, ?, ?)
             ''', (part_id, transaction_type, quantity, datetime.now()))
-            if transaction_type == 'check_out':
-                quantity = -quantity
+
+            # Update stock quantity
+            update_quantity = -quantity if transaction_type == 'check_out' else quantity
             cursor.execute('''
                 UPDATE spare_parts 
                 SET quantity = quantity + ?, last_updated = ?
                 WHERE id = ?
-            ''', (quantity, datetime.now(), part_id))
+            ''', (update_quantity, datetime.now(), part_id))
+
             self.conn.commit()
-        except sqlite3.Error as e:
+            return True, None  # Success, no error message
+        except (sqlite3.Error, ValueError) as e:
             print(f"Error recording transaction: {e}")
             self.conn.rollback()
+            return False, str(e)  # Return error status and message
 
 
     def get_transaction_history(self, days=30):
