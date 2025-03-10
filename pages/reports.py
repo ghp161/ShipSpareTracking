@@ -3,12 +3,20 @@ from data_manager import DataManager
 from utils import create_stock_level_chart, create_transaction_trend, format_transaction_table
 import pandas as pd
 from user_management import login_required
+import navbar
+
+current_page = "Reports"
+st.header(current_page)
+
+navbar.nav(current_page)
+
 
 @login_required
 def render_reports_page():
-    st.title("Reports and Analytics")
+    #st.title("Reports and Analytics")
 
-    tab1, tab2, tab3 = st.tabs(["Stock Levels", "Transaction History", "Export Data"])
+    tab1, tab2, tab3 = st.tabs(
+        ["Stock Levels", "Transaction History", "Export Data"])
 
     with tab1:
         df = st.session_state.data_manager.get_all_parts()
@@ -20,7 +28,8 @@ def render_reports_page():
 
     with tab2:
         days = st.slider("Select time period (days)", 1, 90, 30)
-        transactions = st.session_state.data_manager.get_transaction_history(days)
+        transactions = st.session_state.data_manager.get_transaction_history(
+            days)
 
         if not transactions.empty:
             fig = create_transaction_trend(transactions)
@@ -35,8 +44,9 @@ def render_reports_page():
     with tab3:
         st.subheader("Export Data")
 
-        export_type = st.radio("Select data to export", 
-                              ["Inventory", "Transactions", "Low Stock Items"])
+        export_type = st.radio(
+            "Select data to export",
+            ["Inventory", "Transactions", "Low Stock Items"])
 
         if st.button("Generate Export"):
             if export_type == "Inventory":
@@ -52,10 +62,10 @@ def render_reports_page():
                     label="Download CSV",
                     data=csv,
                     file_name=f"{export_type.lower()}_export.csv",
-                    mime="text/csv"
-                )
+                    mime="text/csv")
             else:
                 st.warning("No data available for export")
+
 
 if __name__ == "__main__":
     render_reports_page()

@@ -4,7 +4,9 @@ import secrets
 from datetime import datetime
 import streamlit as st
 
+
 class UserManager:
+
     def __init__(self, db_path='inventory.db'):
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.create_users_table()
@@ -39,19 +41,17 @@ class UserManager:
     def hash_password(self, password, salt=None):
         if salt is None:
             salt = secrets.token_hex(16)
-        password_hash = hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            salt.encode('utf-8'),
-            100000
-        ).hex()
+        password_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'),
+                                            salt.encode('utf-8'),
+                                            100000).hex()
         return password_hash, salt
 
     def register_user(self, username, password, role='staff'):
         cursor = self.conn.cursor()
         try:
             password_hash, salt = self.hash_password(password)
-            cursor.execute('''
+            cursor.execute(
+                '''
                 INSERT INTO users (username, password_hash, salt, role, created_at)
                 VALUES (?, ?, ?, ?, ?)
             ''', (username, password_hash, salt, role, datetime.now()))
@@ -62,17 +62,19 @@ class UserManager:
 
     def verify_user(self, username, password):
         cursor = self.conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            '''
             SELECT password_hash, salt, role FROM users WHERE username = ?
-        ''', (username,))
+        ''', (username, ))
         result = cursor.fetchone()
-        
+
         if result:
             stored_hash, salt, role = result
             password_hash, _ = self.hash_password(password, salt)
             if password_hash == stored_hash:
                 # Update last login time
-                cursor.execute('''
+                cursor.execute(
+                    '''
                     UPDATE users SET last_login = ? WHERE username = ?
                 ''', (datetime.now(), username))
                 self.conn.commit()
@@ -90,13 +92,15 @@ class UserManager:
     def update_user_role(self, username, new_role):
         cursor = self.conn.cursor()
         try:
-            cursor.execute('''
+            cursor.execute(
+                '''
                 UPDATE users SET role = ? WHERE username = ?
             ''', (new_role, username))
             self.conn.commit()
             return True
         except sqlite3.Error:
             return False
+
 
 def init_session_state():
     """Initialize session state variables for authentication"""
@@ -109,8 +113,10 @@ def init_session_state():
     if 'user_manager' not in st.session_state:
         st.session_state.user_manager = UserManager()
 
+
 def login_required(func):
     """Decorator to require login for accessing pages"""
+
     def wrapper(*args, **kwargs):
         init_session_state()
         if not st.session_state.authenticated:
@@ -118,18 +124,21 @@ def login_required(func):
             render_login_page()
             return
         return func(*args, **kwargs)
+
     return wrapper
 
+
 def render_login_page():
-    st.title("Login")
-    
+    st.title("Ship Inventory Management System")
+
     with st.form("login_form"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
-        
+
         if st.form_submit_button("Login"):
             if username and password:
-                success, role = st.session_state.user_manager.verify_user(username, password)
+                success, role = st.session_state.user_manager.verify_user(
+                    username, password)
                 if success:
                     st.session_state.authenticated = True
                     st.session_state.username = username
