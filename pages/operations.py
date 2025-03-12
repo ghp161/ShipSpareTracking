@@ -50,7 +50,7 @@ def render_operations_page():
         with col1:
             barcode_input = st.text_input("Scan or Enter Barcode",
                                           key="barcode_scanner",
-                                          placeholder="SP12345678")
+                                          placeholder="SP00509457")
 
             if barcode_input:
                 is_valid, cleaned_barcode = st.session_state.barcode_handler.validate_barcode(
@@ -89,6 +89,7 @@ def render_operations_page():
 
                         if st.button(f"Confirm {action}"):
                             transaction_type = 'check_in' if action == "Check In" else 'check_out'
+
                             success, error_msg = st.session_state.data_manager.record_transaction(
                                 part['id'], transaction_type, quantity)
 
