@@ -27,7 +27,7 @@ page_list = list(pages.keys())
 
 def nav(current_page=page_list[0]):
     with st.sidebar:
-        st.image("logo.png", width=50)
+        st.image("logo.png", width=100)
         st.write("")
 
         if st.session_state.authenticated:
@@ -66,7 +66,7 @@ def nav(current_page=page_list[0]):
 
 def make_sidebar(current_page=page_list[0]):
     with st.sidebar:
-        st.image("logo.png", width=50)
+        st.image("logo.png", width=100)
         st.write("")
 
         if st.session_state.authenticated:
