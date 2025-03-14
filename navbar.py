@@ -66,8 +66,7 @@ def nav(current_page=page_list[0]):
 
 def make_sidebar(current_page=page_list[0]):
     with st.sidebar:
-        st.title("💎 Meridian DataLabs")
-        st.write("")
+        st.image("logo.png", width=50)
         st.write("")
 
         if st.session_state.authenticated:
