@@ -3,6 +3,7 @@ from data_manager import DataManager
 from barcode_handler import BarcodeHandler
 from user_management import login_required
 import navbar
+from datetime import datetime
 
 current_page = "Inventory"
 st.header(current_page)
@@ -12,8 +13,6 @@ navbar.nav(current_page)
 
 @login_required
 def render_inventory_page():
-    #st.title("Inventory Management")
-
     tab1, tab2 = st.tabs(["View Inventory", "Add New Part"])
 
     with tab1:
@@ -26,7 +25,9 @@ def render_inventory_page():
                     | df['part_number'].str.contains(search_term, case=False)]
 
         st.dataframe(df[[
-            'part_number', 'name', 'quantity', 'min_order_level', 'barcode'
+            'part_number', 'name', 'quantity', 'min_order_level', 'barcode',
+            'location', 'status', 'last_maintenance_date',
+            'next_maintenance_date'
         ]],
                      hide_index=True)
 
@@ -50,18 +51,71 @@ def render_inventory_page():
                         "Minimum Order Quantity",
                         value=int(part_data['min_order_quantity']),
                         min_value=1)
+                    new_location = st.selectbox(
+                        "Location", [
+                            "Engine Room", "Hull", "Bridge",
+                            "Combat Information Center", "Deck and Mast",
+                            "Bow", "Deck", "Mast", "Throughout Ship",
+                            "Mess Deck", "Flight Deck"
+                        ],
+                        index=[
+                            "Engine Room", "Hull", "Bridge",
+                            "Combat Information Center", "Deck and Mast",
+                            "Bow", "Deck", "Mast", "Throughout Ship",
+                            "Mess Deck", "Flight Deck"
+                        ].index(part_data['location']))
+                    new_status = st.selectbox(
+                        "Status",
+                        ["Operational", "Under Maintenance", "In Store"],
+                        index=["Operational", "Under Maintenance",
+                               "In Store"].index(part_data['status']))
+                    new_last_maintenance_date = st.date_input(
+                        "Last Maintenance Date",
+                        value=datetime.strptime(
+                            part_data['last_maintenance_date'],
+                            '%Y-%m-%d').date())
+                    new_next_maintenance_date = st.date_input(
+                        "Next Maintenance Date",
+                        value=datetime.strptime(
+                            part_data['next_maintenance_date'],
+                            '%Y-%m-%d').date())
 
                     if st.form_submit_button("Update Part"):
-                        st.session_state.data_manager.update_spare_part(
-                            part_data['id'], {
-                                'name': part_data['name'],
-                                'description': part_data['description'],
-                                'quantity': new_quantity,
-                                'min_order_level': new_min_level,
-                                'min_order_quantity': new_min_quantity
-                            })
-                        st.success("Part updated successfully!")
-                        st.rerun()
+                        if new_last_maintenance_date > datetime.now().date():
+                            st.error(
+                                "Last Maintenance Date should not be greater than the current date."
+                            )
+                        elif new_next_maintenance_date <= datetime.now().date(
+                        ):
+                            st.error(
+                                "Next Maintenance Date should be greater than the current date."
+                            )
+                        else:
+                            st.session_state.data_manager.update_spare_part(
+                                part_data['id'], {
+                                    'name':
+                                    part_data['name'],
+                                    'description':
+                                    part_data['description'],
+                                    'quantity':
+                                    new_quantity,
+                                    'min_order_level':
+                                    new_min_level,
+                                    'min_order_quantity':
+                                    new_min_quantity,
+                                    'location':
+                                    new_location,
+                                    'status':
+                                    new_status,
+                                    'last_maintenance_date':
+                                    new_last_maintenance_date.strftime(
+                                        '%Y-%m-%d'),
+                                    'next_maintenance_date':
+                                    new_next_maintenance_date.strftime(
+                                        '%Y-%m-%d')
+                                })
+                            st.success("Part updated successfully!")
+                            st.rerun()
 
     with tab2:
         with st.form("add_part_form"):
@@ -73,36 +127,63 @@ def render_inventory_page():
                                               min_value=0)
             min_order_quantity = st.number_input("Minimum Order Quantity",
                                                  min_value=1)
+            location = st.selectbox("Location", [
+                "Engine Room", "Hull", "Bridge", "Combat Information Center",
+                "Deck and Mast", "Bow", "Deck", "Mast", "Throughout Ship",
+                "Mess Deck", "Flight Deck"
+            ])
+            status = st.selectbox(
+                "Status", ["Operational", "Under Maintenance", "In Store"])
+            last_maintenance_date = st.date_input("Last Maintenance Date")
+            next_maintenance_date = st.date_input("Next Maintenance Date")
 
             if st.form_submit_button("Add Part"):
                 if part_number and name:
-                    barcode = st.session_state.barcode_handler.generate_unique_barcode(
-                    )
-                    success = st.session_state.data_manager.add_spare_part({
-                        'part_number':
-                        part_number,
-                        'name':
-                        name,
-                        'description':
-                        description,
-                        'quantity':
-                        quantity,
-                        'min_order_level':
-                        min_order_level,
-                        'min_order_quantity':
-                        min_order_quantity,
-                        'barcode':
-                        barcode
-                    })
-
-                    if success:
-                        st.success("Part added successfully!")
-                        st.markdown(f"Generated barcode: `{barcode}`")
-                        barcode_image = st.session_state.barcode_handler.generate_barcode(
-                            barcode)
-                        st.image(f"data:image/png;base64,{barcode_image}")
+                    if last_maintenance_date > datetime.now().date():
+                        st.error(
+                            "Last Maintenance Date should not be greater than the current date."
+                        )
+                    elif next_maintenance_date <= datetime.now().date():
+                        st.error(
+                            "Next Maintenance Date should be greater than the current date."
+                        )
                     else:
-                        st.error("Part number already exists!")
+                        barcode = st.session_state.barcode_handler.generate_unique_barcode(
+                        )
+                        success = st.session_state.data_manager.add_spare_part(
+                            {
+                                'part_number':
+                                part_number,
+                                'name':
+                                name,
+                                'description':
+                                description,
+                                'quantity':
+                                quantity,
+                                'min_order_level':
+                                min_order_level,
+                                'min_order_quantity':
+                                min_order_quantity,
+                                'barcode':
+                                barcode,
+                                'location':
+                                location,
+                                'status':
+                                status,
+                                'last_maintenance_date':
+                                last_maintenance_date.strftime('%Y-%m-%d'),
+                                'next_maintenance_date':
+                                next_maintenance_date.strftime('%Y-%m-%d')
+                            })
+
+                        if success:
+                            st.success("Part added successfully!")
+                            st.markdown(f"Generated barcode: `{barcode}`")
+                            barcode_image = st.session_state.barcode_handler.generate_barcode(
+                                barcode)
+                            st.image(f"data:image/png;base64,{barcode_image}")
+                        else:
+                            st.error("Part number already exists!")
                 else:
                     st.error("Part number and name are required!")
 

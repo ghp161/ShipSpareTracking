@@ -55,13 +55,16 @@ class DataManager:
             cursor.execute(
                 '''
                 INSERT INTO spare_parts (part_number, name, description, quantity, 
-                min_order_level, min_order_quantity, barcode, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                min_order_level, min_order_quantity, barcode, last_updated, location, status,
+                last_maintenance_date, next_maintenance_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
                 (part_data['part_number'], part_data['name'],
                  part_data['description'], part_data['quantity'],
                  part_data['min_order_level'], part_data['min_order_quantity'],
-                 part_data['barcode'], datetime.now()))
+                 part_data['barcode'], datetime.now(), part_data['location'],
+                 part_data['status'], part_data['last_maintenance_date'],
+                 part_data['next_maintenance_date']))
             self.conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -76,11 +79,14 @@ class DataManager:
             '''
             UPDATE spare_parts 
             SET name=?, description=?, quantity=?, min_order_level=?,
-                min_order_quantity=?, last_updated=?
+                min_order_quantity=?, last_updated=?, location=?, status=?,
+                last_maintenance_date=?, next_maintenance_date=?
             WHERE id=?
         ''', (part_data['name'], part_data['description'],
               part_data['quantity'], part_data['min_order_level'],
-              part_data['min_order_quantity'], datetime.now(), part_id))
+              part_data['min_order_quantity'], datetime.now(), part_data['location'],
+              part_data['status'], part_data['last_maintenance_date'],
+               part_data['next_maintenance_date'], part_id))
         self.conn.commit()
 
     def get_all_parts(self):

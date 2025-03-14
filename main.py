@@ -24,6 +24,7 @@ if 'alerts' not in st.session_state:
 
 @login_required
 def main():
+
     st.title("Ship Inventory Management System")
 
     # Show user info in sidebar

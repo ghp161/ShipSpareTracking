@@ -129,6 +129,8 @@ def login_required(func):
 
 
 def render_login_page():
+    st.image("logo.png", width=100)
+    st.write("")
     st.title("Ship Inventory Management System")
 
     with st.form("login_form"):
