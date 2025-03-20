@@ -1,0 +1,11 @@
+pyproject.toml
+pages/admin.py
+pages/analytics.py
+pages/inventory.py
+pages/operations.py
+pages/reports.py
+repl_nix_workspace.egg-info/PKG-INFO
+repl_nix_workspace.egg-info/SOURCES.txt
+repl_nix_workspace.egg-info/dependency_links.txt
+repl_nix_workspace.egg-info/requires.txt
+repl_nix_workspace.egg-info/top_level.txt

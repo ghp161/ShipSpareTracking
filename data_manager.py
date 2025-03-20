@@ -121,13 +121,14 @@ class DataManager:
         cursor = self.conn.cursor()
         try:
             # First verify the part exists and has enough stock
-            print(f"Error recording transaction: {part_id}")  # hari
+            # print(f"recording transaction: {part_id}")  # hari
             part_df = self.get_part_by_id(part_id)
             if part_df is None or part_df.empty:
                 raise ValueError(f"Part with ID {part_id} not found")
 
             part = part_df.iloc[0]
             current_quantity = int(part['quantity'])
+            selected_part = int(part_id)
 
             if transaction_type == 'check_out' and current_quantity < quantity:
                 raise ValueError(
@@ -139,7 +140,9 @@ class DataManager:
                 '''
                 INSERT INTO transactions (part_id, transaction_type, quantity, timestamp)
                 VALUES (?, ?, ?, ?)
-            ''', (part_id, transaction_type, quantity, datetime.now()))
+            ''', (selected_part, transaction_type, quantity, datetime.now()))
+
+            print(f"Recorded transaction: {transaction_type}")
 
             # Update stock quantity
             update_quantity = -quantity if transaction_type == 'check_out' else quantity
@@ -148,7 +151,7 @@ class DataManager:
                 UPDATE spare_parts 
                 SET quantity = quantity + ?, last_updated = ?
                 WHERE id = ?
-            ''', (update_quantity, datetime.now(), part_id))
+            ''', (update_quantity, datetime.now(), selected_part))
 
             self.conn.commit()
             return True, None  # Success, no error message

@@ -21,7 +21,7 @@ def render_operations_page():
     if 'last_scans' not in st.session_state:
         st.session_state.last_scans = []
 
-    #st.title("Operations")
+    st.title("Operations")
 
     # Show any active alerts
     low_stock = st.session_state.data_manager.get_low_stock_items()
@@ -178,6 +178,9 @@ def render_operations_page():
                             part_data['id'], 'check_out', check_out_quantity)
 
                         if success:
+                            st.success(
+                                f"Checked out {check_out_quantity} units")
+
                             # Check if this transaction triggered a low stock alert
                             updated_df = st.session_state.data_manager.get_part_by_id(
                                 part_data['id'])
@@ -189,15 +192,9 @@ def render_operations_page():
                                         f"⚠️ Stock Alert: {updated_part['name']} is now below minimum stock level!"
                                     )
 
-                            #st.rerun()
-                            st.success(f"Checked out {check_out_quantity} units")
-                             # Debugging: Check if success message is reached
-                            st.write("Check-Out successful")
-                            #st.rerun()
+                            st.rerun()
                         else:
                             st.error(f"Transaction failed: {error_msg}")
-
-                            
 
     with tab3:
         low_stock = st.session_state.data_manager.get_low_stock_items()
