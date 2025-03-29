@@ -2,6 +2,7 @@ import streamlit as st
 from time import sleep
 from streamlit_option_menu import option_menu
 from user_management import init_session_state, render_login_page
+import base64
 
 # Initialize session state
 init_session_state()
@@ -13,7 +14,8 @@ pages = {
     'Analytics': 'pages/analytics.py',
     'Inventory': 'pages/inventory.py',
     'Operations': 'pages/operations.py',
-    'Reports': 'pages/reports.py'
+    'Reports': 'pages/reports.py',
+    'Logout': 'main.py'
 }
 
 icons = [
@@ -27,7 +29,8 @@ page_list = list(pages.keys())
 
 def nav(current_page=page_list[0]):
     with st.sidebar:
-        st.image("logo.png", width=100)
+        #st.image("logo.png", width=100)
+        add_logo()
         st.write("")
 
         if st.session_state.authenticated:
@@ -54,10 +57,14 @@ def nav(current_page=page_list[0]):
                             default_index=page_list.index(current_page),
                             orientation="vertical")
 
-            if st.button("Logout"):
+            #print(current_page)
+            print(p)
+
+            if p == "Logout":
                 st.session_state.authenticated = False
                 st.session_state.username = None
                 st.session_state.user_role = None
+                render_login_page()
                 st.rerun()
 
             if current_page != p:
@@ -66,7 +73,8 @@ def nav(current_page=page_list[0]):
 
 def make_sidebar(current_page=page_list[0]):
     with st.sidebar:
-        st.image("logo.png", width=100)
+        #st.image("logo.png", width=100)
+        add_logo()
         st.write("")
 
         if st.session_state.authenticated:
@@ -92,14 +100,17 @@ def make_sidebar(current_page=page_list[0]):
                             icons=icons,
                             default_index=page_list.index(current_page),
                             orientation="vertical")
-            if current_page != p:
-                st.switch_page(pages[p])
 
-            if st.button("Logout"):
+            if p == "Logout":
                 st.session_state.authenticated = False
                 st.session_state.username = None
                 st.session_state.user_role = None
+                render_login_page()
                 st.rerun()
+
+            if current_page != p:
+                st.switch_page(pages[p])
+
         #elif current_page != p:
         # If anyone tries to access a secret page without being logged in,
         # redirect them to the login page
@@ -113,5 +124,28 @@ def logout():
     sleep(0.5)
     render_login_page()
 
+def get_base64_of_bin_file(png_file: str) -> str:
+    with open(png_file, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+@st.cache_resource
+def build_markup_for_logo(png_file: str) -> str:
+    binary_string = get_base64_of_bin_file(png_file)
+    return f"""
+            <style>
+                [data-testid="stSidebarHeader"] {{
+                    background-image: url("data:image/png;base64,{binary_string}");
+                    background-repeat: no-repeat;
+                    background-size: contain;
+                    background-position: top center;
+                }}
+            </style>
+            """
+
+def add_logo():
+    st.markdown(
+        build_markup_for_logo("logo.png"),
+        unsafe_allow_html=True,
+    )
 
 #st.switch_page("login.py")

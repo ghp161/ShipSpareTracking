@@ -2,6 +2,9 @@ import streamlit as st
 from user_management import login_required
 #from navbar import make_sidebar
 import navbar
+from app_settings import set_page_configuration
+
+set_page_configuration()
 
 current_page = "User Management"
 st.header(current_page)

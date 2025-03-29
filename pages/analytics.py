@@ -4,6 +4,9 @@ from utils import (create_demand_forecast_chart, calculate_reorder_point,
                    calculate_stock_turnover)
 from user_management import login_required
 import navbar
+from app_settings import set_page_configuration
+
+set_page_configuration()
 
 current_page = "Analytics"
 st.header(current_page)

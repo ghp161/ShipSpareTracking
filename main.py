@@ -3,10 +3,9 @@ from data_manager import DataManager
 from barcode_handler import BarcodeHandler
 from user_management import login_required, init_session_state, render_login_page
 from navbar import make_sidebar
+from app_settings import set_page_configuration
 
-st.set_page_config(page_title="Ship Inventory Management",
-                   page_icon="🚢",
-                   layout="wide")
+set_page_configuration()
 
 # Initialize session state
 init_session_state()

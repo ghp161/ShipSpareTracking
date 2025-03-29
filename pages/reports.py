@@ -4,6 +4,9 @@ from utils import create_stock_level_chart, create_transaction_trend, format_tra
 import pandas as pd
 from user_management import login_required
 import navbar
+from app_settings import set_page_configuration
+
+set_page_configuration()
 
 current_page = "Reports"
 st.header(current_page)

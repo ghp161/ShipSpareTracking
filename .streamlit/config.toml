@@ -11,5 +11,9 @@ backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
 
+[ui]
+hideTopBar = true
+
 [client]
 showSidebarNavigation = false
+toolbarMode = "minimal"

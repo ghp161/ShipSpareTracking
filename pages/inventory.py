@@ -4,6 +4,9 @@ from barcode_handler import BarcodeHandler
 from user_management import login_required
 import navbar
 from datetime import datetime
+from app_settings import set_page_configuration
+
+set_page_configuration()
 
 current_page = "Inventory"
 st.header(current_page)
