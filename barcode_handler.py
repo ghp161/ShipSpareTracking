@@ -3,6 +3,7 @@ from barcode.writer import ImageWriter
 import io
 import base64
 import re
+from barcode import *
 
 class BarcodeHandler:
     @staticmethod

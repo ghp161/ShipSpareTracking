@@ -7,14 +7,7 @@ from app_settings import set_page_configuration
 
 set_page_configuration()
 
-# Initialize session state
-init_session_state()
 
-# Initialize data manager and barcode handler if needed
-if 'data_manager' not in st.session_state:
-    st.session_state.data_manager = DataManager()
-if 'barcode_handler' not in st.session_state:
-    st.session_state.barcode_handler = BarcodeHandler()
 
 # Initialize alerts in session state
 if 'alerts' not in st.session_state:
@@ -23,6 +16,21 @@ if 'alerts' not in st.session_state:
 
 @login_required
 def main():
+
+    # Initialize session state
+    init_session_state()
+
+    # Set page config (will be overridden by navbar if needed)
+    #st.set_page_config(layout="centered")
+
+    #if not st.session_state.get('authenticated', False):
+    #    render_login_page()
+
+    # Initialize data manager and barcode handler if needed
+    if 'data_manager' not in st.session_state:
+        st.session_state.data_manager = DataManager()
+    if 'barcode_handler' not in st.session_state:
+        st.session_state.barcode_handler = BarcodeHandler()
 
     st.title("Ship Inventory Management System")
 
@@ -106,7 +114,7 @@ def main():
 
 
 if __name__ == "__main__":
-    if not st.session_state.authenticated:
+    if 'authenticated' not in st.session_state:
         render_login_page()
     else:
         main()

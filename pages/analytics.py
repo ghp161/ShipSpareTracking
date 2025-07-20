@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from utils import (create_demand_forecast_chart, calculate_reorder_point,
                    calculate_stock_turnover)
-from user_management import login_required
+from user_management import login_required, init_session_state, render_login_page
 import navbar
 from app_settings import set_page_configuration
 
@@ -105,4 +105,7 @@ def render_analytics_page():
 
 
 if __name__ == "__main__":
-    render_analytics_page()
+    if not st.session_state.authenticated:
+        render_login_page()
+    else:
+        render_analytics_page()

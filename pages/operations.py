@@ -168,35 +168,41 @@ def render_operations_page():
                             st.error(f"Transaction failed: {error_msg}")
 
             with col2:
-                with st.form("check_out_form"):
-                    check_out_quantity = st.number_input(
-                        "Check-Out Quantity",
-                        min_value=1,
-                        max_value=int(part_data['quantity']),
-                        value=1,
-                        key="checkout_quantity")
-
-                    if st.form_submit_button("Check-Out"):
+                with st.form(f"check_out_form_{part_data['id']}"):  # Unique form key per part
+                    # Get the available quantity
+                    available_quantity = int(part_data['quantity'])
+                    
+                    if available_quantity > 0:
+                        check_out_quantity = st.number_input(
+                            "Check-Out Quantity",
+                            min_value=1,
+                            max_value=available_quantity,
+                            value=min(1, available_quantity),
+                            key=f"checkout_quantity_{part_data['id']}"
+                        )
+                    else:
+                        st.warning("This item is currently out of stock")
+                        check_out_quantity = 0  # Default value when out of stock
+                    
+                    # Submit button should be at form level, not nested in if
+                    submitted = st.form_submit_button("Check-Out", disabled=(available_quantity <= 0))
+                    
+                    if submitted and available_quantity > 0:
                         success, error_msg = st.session_state.data_manager.record_transaction(
                             part_data['id'], 'check_out', check_out_quantity)
 
                         if success:
-                            # Check if this transaction triggered a low stock alert
-                            updated_df = st.session_state.data_manager.get_part_by_id(
-                                part_data['id'])
+                            # Check for low stock alert
+                            updated_df = st.session_state.data_manager.get_part_by_id(part_data['id'])
                             if updated_df is not None and not updated_df.empty:
                                 updated_part = updated_df.iloc[0]
-                                if updated_part['quantity'] <= updated_part[
-                                        'min_order_level']:
+                                if updated_part['quantity'] <= updated_part['min_order_level']:
                                     st.warning(
                                         f"⚠️ Stock Alert: {updated_part['name']} is now below minimum stock level!"
                                     )
-
-                            #st.rerun()
-                            st.success(f"Checked out {check_out_quantity} units")
-                             # Debugging: Check if success message is reached
-                            st.write("Check-Out successful")
-                            #st.rerun()
+                            
+                            st.success(f"Successfully checked out {check_out_quantity} units of {part_data['name']}")
+                            st.experimental_rerun()  # Use experimental_rerun instead of rerun
                         else:
                             st.error(f"Transaction failed: {error_msg}")
 
