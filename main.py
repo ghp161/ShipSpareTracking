@@ -3,8 +3,8 @@ from data_manager import DataManager
 from barcode_handler import BarcodeHandler
 from user_management import login_required, init_session_state, render_login_page
 from navbar import make_sidebar
-from app_settings import set_page_configuration
-
+from app_settings import set_page_configuration #, add_logo_background
+from io import BytesIO
 set_page_configuration()
 
 
@@ -19,6 +19,9 @@ def main():
 
     # Initialize session state
     init_session_state()
+
+    # Add the background logo (40% opacity = 0.4)
+    #add_logo_background("logo.png", opacity=0.4)
 
     # Set page config (will be overridden by navbar if needed)
     #st.set_page_config(layout="centered")
@@ -64,15 +67,22 @@ def main():
     col1, col2 = st.columns(2)
 
     with col1:
+        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
         low_stock = st.session_state.data_manager.get_low_stock_items()
         st.subheader("Inventory Overview")
         df = st.session_state.data_manager.get_all_parts()
         total_parts = len(df)
         low_stock_count = len(low_stock)
+        lpl_stock_count = len(lpl_stock)
 
         st.metric("Total Parts",
                   total_parts,
                   help="Total number of unique parts in inventory")
+        st.metric("LPL Stock Items",
+                  lpl_stock_count,
+                  delta=lpl_stock_count,
+                  delta_color="inverse",
+                  help="Number of items below last piece level")
         st.metric("Low Stock Items",
                   low_stock_count,
                   delta=low_stock_count,
@@ -81,6 +91,25 @@ def main():
 
     with col2:
         st.subheader("Quick Actions")
+        if st.button("View Last Piece Level Stock Alerts"):
+            lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
+            if not lpl_stock.empty:
+                st.dataframe(lpl_stock[[
+                    'name', 'part_number', 'quantity', 'min_order_level'
+                ]],
+                             hide_index=True)
+
+                # Download low stock report
+                csv = lpl_stock.to_csv(index=False)
+                st.download_button(
+                    "Download Last Piece Level Stock Report",
+                    csv,
+                    "last_piece_stock_report.csv",
+                    "text/csv",
+                    help="Download a CSV report of all last piece level stock items")
+            else:
+                st.success("All items are above last piece levels")
+
         if st.button("View Low Stock Items"):
             low_stock = st.session_state.data_manager.get_low_stock_items()
             if not low_stock.empty:
@@ -112,6 +141,8 @@ def main():
     else:
         st.info("No recent transactions found")
 
+    # Close the main div at the end
+    #st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     if 'authenticated' not in st.session_state:

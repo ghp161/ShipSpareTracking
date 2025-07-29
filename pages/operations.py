@@ -5,6 +5,7 @@ from user_management import login_required
 from datetime import datetime
 import navbar
 from app_settings import set_page_configuration
+import time
 
 set_page_configuration()
 
@@ -27,9 +28,21 @@ def render_operations_page():
     #st.title("Operations")
 
     # Show any active alerts
+    lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
+    if not lpl_stock.empty:
+        with st.expander("🚨 Last Piece Stock Alerts", expanded=False):
+            st.warning(f"{len(lpl_stock)} items need attention!")
+            for _, item in lpl_stock.iterrows():
+                st.error(f"""
+                    **{item['name']}** (Part #{item['part_number']})
+                    - Current Stock: {item['quantity']}
+                    - Minimum Level: {item['min_order_level']}
+                    - Suggested Order: {item['min_order_quantity']}
+                """)
+
     low_stock = st.session_state.data_manager.get_low_stock_items()
     if not low_stock.empty:
-        with st.expander("🚨 Low Stock Alerts", expanded=True):
+        with st.expander("🚨 Low Stock Alerts", expanded=False):
             st.warning(f"{len(low_stock)} items need attention!")
             for _, item in low_stock.iterrows():
                 st.error(f"""
@@ -39,11 +52,11 @@ def render_operations_page():
                     - Suggested Order: {item['min_order_quantity']}
                 """)
 
-    tab1, tab2, tab3 = st.tabs(
-        ["Barcode Scanner", "Check-In/Check-Out", "Issue Parts"])
+    tab1, tab2 = st.tabs(
+        ["Barcode Scanner Interface", "Check-In / Check-Out"])
 
     with tab1:
-        st.subheader("Barcode Scanner Interface")
+        #st.subheader("Barcode Scanner Interface")
         st.info("""
         📱 Use this interface with a physical barcode scanner or enter the barcode manually.
         The scanner should work automatically when you scan a barcode.
@@ -53,16 +66,18 @@ def render_operations_page():
         with col1:
             barcode_input = st.text_input("Scan or Enter Barcode",
                                           key="barcode_scanner",
-                                          placeholder="SP00509457")
+                                          placeholder="ABC-D-1234")
 
             if barcode_input:
                 is_valid, cleaned_barcode = st.session_state.barcode_handler.validate_barcode(
                     barcode_input)
+                print("barcode_input:", barcode_input)  # Add this temporarily
+                print("is_valid:", is_valid)  # Add this temporarily
                 if is_valid:
                     success, part = st.session_state.barcode_handler.get_part_by_barcode(
-                        st.session_state.data_manager, cleaned_barcode)
+                        st.session_state.data_manager, barcode_input)
                     if success:
-                        st.success("Part found!")
+                        #st.success("Part found!")
 
                         # Show alert if item is low on stock
                         if part['quantity'] <= part['min_order_level']:
@@ -73,28 +88,40 @@ def render_operations_page():
                         st.json({
                             "Name": part['name'],
                             "Part Number": part['part_number'],
+                            "Box No": part['box_no'],
+                            "Compartment Name": part['compartment_no'],
+                            "ILMS Code": part['ilms_code'],
                             "Current Quantity": int(part['quantity']),
                             "Min Order Level": int(part['min_order_level'])
                         })
 
-                        # Quick actions for scanned part
-                        action = st.selectbox("Select Action",
-                                              ["Check In", "Check Out"],
-                                              key="barcode_action")
+                        cols = st.columns(2)
+                        with cols[0]:
+                            # Quick actions for scanned part
+                            action = st.selectbox("Select Action",
+                                                ["Check In", "Check Out"],
+                                                key="barcode_action")
 
-                        quantity = st.number_input(
-                            "Quantity",
-                            min_value=1,
-                            max_value=int(part['quantity'])
-                            if action == "Check Out" else None,
-                            value=1,
-                            key="barcode_quantity")
+                            quantity = st.number_input(
+                                "Quantity",
+                                min_value=1,
+                                max_value=int(part['quantity'])
+                                if action == "Check Out" else None,
+                                value=1,
+                                key="barcode_quantity")
+                        with cols[1]:
+                            if action == "Check Out":
+                                reason = st.selectbox("Reason", ["Operational", "Maintenance", "Damaged"])
+                                remarks = st.text_area("Remarks")
+                            else:
+                                reason = st.selectbox("Reason", ["New", "After Maintenance"])
+                                remarks = st.text_area("Remarks")
 
                         if st.button(f"Confirm {action}"):
                             transaction_type = 'check_in' if action == "Check In" else 'check_out'
 
                             success, error_msg = st.session_state.data_manager.record_transaction(
-                                part['id'], transaction_type, quantity)
+                                part['id'], transaction_type, quantity, reason, remarks)
 
                             if success:
                                 st.success(
@@ -123,10 +150,13 @@ def render_operations_page():
                         st.error("Barcode not found in system")
                 else:
                     st.error(
-                        "Invalid barcode format. Expected format: SP followed by 8 digits"
+                        "Invalid barcode format. Expected format: 3 chars - 1 char - 4 digits (ABC-D-1234)"
                     )
 
         with col2:
+            if len(barcode_input) > 0:
+                barcode_image = st.session_state.barcode_handler.generate_barcode(barcode_input)
+                st.image(f"data:image/png;base64,{barcode_image}")
             st.markdown("### Last Scanned")
             for scan in st.session_state.last_scans[-5:]:
                 st.text(scan)
@@ -136,10 +166,10 @@ def render_operations_page():
 
         if not df.empty:
             selected_part = st.selectbox("Select Part",
-                                         df['name'].tolist(),
+                                         df['description'].tolist(),
                                          key="checkin_part")
 
-            part_data = df[df['name'] == selected_part].iloc[0]
+            part_data = df[df['description'] == selected_part].iloc[0]
 
             # Show stock level warning if applicable
             if part_data['quantity'] <= part_data['min_order_level']:
@@ -157,12 +187,15 @@ def render_operations_page():
                                                         min_value=1,
                                                         value=1,
                                                         key="checkin_quantity")
-
+                    reason = st.selectbox("Reason", ["New", "After Maintenance"])
+                    remarks = st.text_area("Remarks")
+                    
                     if st.form_submit_button("Check-In"):
                         success, error_msg = st.session_state.data_manager.record_transaction(
-                            part_data['id'], 'check_in', check_in_quantity)
+                            part_data['id'], 'check_in', check_in_quantity, reason, remarks)
                         if success:
                             st.success(f"Checked in {check_in_quantity} units")
+                            time.sleep(3)  # This will block the UI
                             st.rerun()
                         else:
                             st.error(f"Transaction failed: {error_msg}")
@@ -180,6 +213,8 @@ def render_operations_page():
                             value=min(1, available_quantity),
                             key=f"checkout_quantity_{part_data['id']}"
                         )
+                        reason = st.selectbox("Reason", ["Operational", "Maintenance", "Damaged"])
+                        remarks = st.text_area("Remarks")
                     else:
                         st.warning("This item is currently out of stock")
                         check_out_quantity = 0  # Default value when out of stock
@@ -189,7 +224,7 @@ def render_operations_page():
                     
                     if submitted and available_quantity > 0:
                         success, error_msg = st.session_state.data_manager.record_transaction(
-                            part_data['id'], 'check_out', check_out_quantity)
+                            part_data['id'], 'check_out', check_out_quantity, reason, remarks)
 
                         if success:
                             # Check for low stock alert
@@ -202,27 +237,11 @@ def render_operations_page():
                                     )
                             
                             st.success(f"Successfully checked out {check_out_quantity} units of {part_data['name']}")
-                            st.experimental_rerun()  # Use experimental_rerun instead of rerun
+                            #st.toast(message, icon="✅")
+                            time.sleep(3)  # This will block the UI
+                            st.rerun()
                         else:
                             st.error(f"Transaction failed: {error_msg}")
-
-                            
-
-    with tab3:
-        low_stock = st.session_state.data_manager.get_low_stock_items()
-
-        if not low_stock.empty:
-            st.warning("The following items are below minimum order level:")
-
-            for _, part in low_stock.iterrows():
-                st.markdown(f"""
-                    **{part['name']}** (Part #: {part['part_number']})
-                    - Current Quantity: {part['quantity']}
-                    - Minimum Order Level: {part['min_order_level']}
-                    - Suggested Order Quantity: {part['min_order_quantity']}
-                """)
-        else:
-            st.success("All items are above minimum order level")
 
 
 if __name__ == "__main__":

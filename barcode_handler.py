@@ -24,15 +24,28 @@ class BarcodeHandler:
         return f"{prefix}{random_part}"
 
     @staticmethod
-    def validate_barcode(barcode_input):
-        """Validate barcode format and clean input"""
-        # Remove any non-alphanumeric characters (like newlines from scanner)
-        cleaned_input = re.sub(r'[^a-zA-Z0-9]', '', barcode_input)
-
-        # Check if it matches our format (SP + 8 digits)
-        if re.match(r'^SP\d{8}$', cleaned_input):
-            return True, cleaned_input
-        return False, None
+    def validate_barcode(barcode):
+        """
+        Validate barcode format: 3 chars - 1 char - 4 digits (ABC-D-1234)
+        
+        Args:
+            barcode (str): The barcode to validate
+            
+        Returns:
+            tuple: (is_valid: bool, error_message: str)
+        """
+        if not isinstance(barcode, str):
+            return False, "Barcode must be a string"
+        
+        pattern = r'^[A-Za-z]{3}-[A-Za-z]{1}-\d{4}$'
+        print("barcode:", barcode)  # Add this temporarily
+        if not re.fullmatch(pattern, barcode):
+            return False, (
+                "Invalid barcode format. "
+                "Required format: ABC-D-1234 (3 letters, 1 letter, 4 digits)"
+            )
+        
+        return True, "Barcode is valid"
 
     @staticmethod
     def get_part_by_barcode(data_manager, barcode_input):

@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 from user_management import login_required
 import navbar
 from app_settings import set_page_configuration
@@ -13,86 +12,11 @@ st.header(current_page)
 
 navbar.nav(current_page)
 
-class EnhancedUserManager:
-    def __init__(self, db_path='inventory.db'):
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
-    
-    def get_all_users_with_departments(self):
-        query = '''
-            SELECT u.id, u.username, u.role, 
-                   u.created_at, u.last_login, u.isactive,
-                   d1.name as parent_department,
-                   d2.name as child_department
-            FROM users u
-            LEFT JOIN departments d2 ON u.department_id = d2.id
-            LEFT JOIN departments d1 ON d2.parent_id = d1.id
-            ORDER BY u.role, u.username
-        '''
-        return pd.read_sql_query(query, self.conn)
-    
-    def register_user(self, username, password, role='User', department_id=None):
-        cursor = self.conn.cursor()
-        try:
-            password_hash, salt = self.hash_password(password)
-            cursor.execute(
-                '''
-                INSERT INTO users (username, password_hash, salt, role, created_at, department_id)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (username, password_hash, salt, role, datetime.now(), department_id))
-            self.conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            return False
-        
-    def get_parent_departments(self):
-        query = "SELECT id, name FROM departments WHERE parent_id IS NULL"
-        return pd.read_sql_query(query, self.conn)
-    
-    def get_child_departments(self, parent_id):
-        if not parent_id:
-            return pd.DataFrame(columns=['id', 'name'])
-        query = "SELECT id, name FROM departments WHERE parent_id = ?"
-        return pd.read_sql_query(query, self.conn, params=(parent_id,))
-    
-    def update_user(self, user_id, username, role, department_id=None):
-        cursor = self.conn.cursor()
-        try:
-            cursor.execute('''
-                UPDATE users 
-                SET username=?, role=?, department_id=?
-                WHERE id=?
-            ''', (username, role, department_id, user_id))
-            self.conn.commit()
-            return True, None
-        except sqlite3.Error as e:
-            return False, str(e)
-    
-    def deactivate_user(self, user_id):
-        cursor = self.conn.cursor()
-        try:
-            cursor.execute("UPDATE users SET isactive=0 WHERE id=?", (user_id,))
-            self.conn.commit()
-            return True, None
-        except sqlite3.Error as e:
-            return False, str(e)
-    
-    def activate_user(self, user_id):
-        cursor = self.conn.cursor()
-        try:
-            cursor.execute("UPDATE users SET isactive=1 WHERE id=?", (user_id,))
-            self.conn.commit()
-            return True, None
-        except sqlite3.Error as e:
-            return False, str(e)
-
 @login_required
 def render_admin_page():
     if st.session_state.user_role in ['Admin', 'User']:
         st.error("You don't have permission to access this page")
         return
-    
-    if 'user_manager' not in st.session_state:
-        st.session_state.user_manager = EnhancedUserManager()
     
     tab1, tab2 = st.tabs(["Manage Users", "Add New User"])
 

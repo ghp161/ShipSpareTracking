@@ -30,6 +30,8 @@ page_list = list(pages.keys())
 
 
 def nav(current_page=page_list[0]):
+    # Initialize selected variable
+    selected = None
     # Initialize session state if not already done
     if 'authenticated' not in st.session_state:
         init_session_state()
@@ -43,13 +45,34 @@ def nav(current_page=page_list[0]):
         st.write("")
 
         if st.session_state.authenticated:
-            st.write(f"Logged in as: {st.session_state.username}")
-            st.write(f"Role: {st.session_state.user_role}")
+            # Safe session state access
+            username = st.session_state.get('username', 'Guest')  # Default to 'Guest' if not set
+            st.write(f"Logged in as: {username}")
+            #st.write(f"Logged in as: {st.session_state.username}")
+            #st.write(f"Role: {st.session_state.user_role}")
+            role = st.session_state.get('user_role', '')  # Default to 'Guest' if not set
+            st.write(f"Role: {role}")
 
             # Safely check for low stock items
             if 'data_manager' in st.session_state:
                 try:
                     # Alert Section in Sidebar
+                    if st.session_state.user_role == 'User':
+                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items_by_dept(st.session_state.get('user_department_id'))
+                    else:
+                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
+                    if not lpl_stock.empty:
+                        st.error(
+                            f"🚨 {len(lpl_stock)} - Last Piece Level!")
+                        with st.expander("View Last Piece Level Stock Alerts"):
+                            for _, item in lpl_stock.iterrows():
+                                st.warning(f"""
+                                    **{item['name']}**
+                                    - Current: {item['quantity']}
+                                    - Minimum: {item['min_order_level']}
+                                    - Order Quantity: {item['min_order_quantity']}
+                                """)
+
                     if st.session_state.user_role == 'User':
                         low_stock = st.session_state.data_manager.get_low_stock_items_by_dept(st.session_state.get('user_department_id'))
                     else:
@@ -79,9 +102,13 @@ def nav(current_page=page_list[0]):
                             if p not in ['User Management', 'Departments']]
                 visible_icons = [icon for icon, p in zip(icons, pages.keys())
                             if p not in ['User Management', 'Departments']]
-            else:  # Regular user
+            elif user_role == 'User':
                 visible_pages = ['Inventory', 'Reports', 'Logout']
                 visible_icons = ['gear', 'clipboard2-data', 'box-arrow-right']
+            else:
+                visible_pages = []
+                visible_icons = []
+
 
             #print("visible_pages list 2:", visible_pages)  # Add this temporarily
             # Create the menu
@@ -96,11 +123,14 @@ def nav(current_page=page_list[0]):
                 
                 # Handle logout
                 if selected == "Logout":
-                    st.session_state.clear()  # Clear all session state
+                    #st.session_state.clear()  # Clear all session state
+                    # Clear session state
+                    for key in list(st.session_state.keys()):
+                        del st.session_state[key]
                     st.rerun()   # Rerun to show login page
 
-            if current_page != selected:
-                st.switch_page(pages[selected])
+                if current_page != selected:
+                    st.switch_page(pages[selected])
         #else:
             # Show login page without sidebar
             #st.set_page_config(layout="centered")
@@ -108,6 +138,8 @@ def nav(current_page=page_list[0]):
 
 
 def make_sidebar(current_page=page_list[0]):
+    # Initialize selected variable
+    selected = None
 
     # Initialize session state if not already done
     if 'authenticated' not in st.session_state:
@@ -131,6 +163,22 @@ def make_sidebar(current_page=page_list[0]):
                 try:
                     # Alert Section in Sidebar
                     if st.session_state.user_role == 'User':
+                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items_by_dept(st.session_state.get('user_department_id'))
+                    else:
+                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
+                    if not lpl_stock.empty:
+                        st.error(
+                            f"🚨 {len(lpl_stock)} - Last Piece Level!")
+                        with st.expander("View Last Piece Level Stock Alerts"):
+                            for _, item in lpl_stock.iterrows():
+                                st.warning(f"""
+                                    **{item['name']}**
+                                    - Current: {item['quantity']}
+                                    - Minimum: {item['min_order_level']}
+                                    - Order Quantity: {item['min_order_quantity']}
+                                """)
+                                
+                    if st.session_state.user_role == 'User':
                         low_stock = st.session_state.data_manager.get_low_stock_items_by_dept(st.session_state.get('user_department_id'))
                     else:
                         low_stock = st.session_state.data_manager.get_low_stock_items()
@@ -159,9 +207,13 @@ def make_sidebar(current_page=page_list[0]):
                             if p not in ['User Management', 'Departments']]
                 visible_icons = [icon for icon, p in zip(icons, pages.keys())
                             if p not in ['User Management', 'Departments']]
-            else:  # Regular user
+            elif user_role == 'User':
                 visible_pages = ['Inventory', 'Reports', 'Logout']
                 visible_icons = ['gear', 'clipboard2-data', 'box-arrow-right']
+            else:
+                visible_pages = []
+                visible_icons = []
+
 
             #print("visible_pages list 2:", visible_pages)  # Add this temporarily
             # Create the menu
@@ -176,11 +228,14 @@ def make_sidebar(current_page=page_list[0]):
                 
                 # Handle logout
                 if selected == "Logout":
-                    st.session_state.clear()  # Clear all session state
+                    #st.session_state.clear()  # Clear all session state
+                    # Clear session state
+                    for key in list(st.session_state.keys()):
+                        del st.session_state[key]
                     st.rerun()   # Rerun to show login page
 
-            if current_page != selected:
-                st.switch_page(pages[selected])
+                if current_page != selected:
+                    st.switch_page(pages[selected])
         else:
             # Show login page without sidebar
             st.set_page_config(layout="centered")
@@ -197,6 +252,9 @@ def make_sidebar(current_page=page_list[0]):
 
 def logout():
     st.session_state.logged_in = False
+    # Clear session state
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
     st.info("Logged out successfully!")
     sleep(0.5)
     render_login_page()
