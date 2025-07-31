@@ -47,7 +47,7 @@ def render_inventory_page():
             if not current_user_dept_id:
                 st.error("You are not assigned to any department. Please contact administrator.")
                 return
-            #print("dept_id:", current_user_dept_id)  # Add this temporarily
+            print("dept_id:", current_user_dept_id)  # Add this temporarily
             # Show department info
             dept_info = st.session_state.data_manager.get_department_info(current_user_dept_id)
             #print("dept_info:", dept_info)  # Add this temporarily
@@ -56,6 +56,38 @@ def render_inventory_page():
             
             # Get items only for user's department
             df = st.session_state.data_manager.get_parts_by_department(current_user_dept_id)
+
+            # Search and filter 
+            search_term = st.text_input("Search parts by name, description, part_number, box_no, compartment_no, ilms_code or barcode")
+            if search_term:
+                df = df[df['name'].str.contains(search_term, case=False) |
+                        df['description'].str.contains(search_term, case=False) |
+                        df['part_number'].str.contains(search_term, case=False) |
+                        df['barcode'].str.contains(search_term, case=False) |
+                        df['ilms_code'].str.contains(search_term, case=False) |
+                        df['compartment_no'].str.contains(search_term, case=False) |
+                        df['box_no'].str.contains(search_term, case=False)]
+
+            if not df.empty:
+                st.dataframe(df[[
+                    'part_number', 'name', 'quantity', 'parent_department', 'child_department', 
+                    'line_no', 'description', 'page_no', 'order_no',
+                    'material_code', 'ilms_code', 'item_denomination',
+                    'mustered', 'compartment_no', 'box_no', 'remark',
+                    'min_order_level', 'barcode',
+                    'status', 'last_maintenance_date',
+                    'next_maintenance_date'
+                ]],
+                column_config={
+                    "mustered": st.column_config.CheckboxColumn("Mustered"),
+                    "quantity": st.column_config.NumberColumn("Qty", format="%d")
+                },
+                use_container_width=True,
+                hide_index=True)
+            else:
+                st.info("""
+                📱 Stock information not available for selected department.
+                """)
         else:
             selected_child = ""
             cols = st.columns(2)
