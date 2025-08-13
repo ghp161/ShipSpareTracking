@@ -5,6 +5,7 @@ from user_management import login_required
 import navbar
 from app_settings import set_page_configuration
 from data_manager import DataManager
+import time
 
 set_page_configuration()
 
@@ -72,7 +73,8 @@ def render_departments_page():
                             # Implement update logic
                             if st.session_state.data_manager.update_department(dept_id, new_code, new_name, parent_id):
                                 st.rerun()
-                                st.success("Department Updated successfully")                                
+                                st.toast("Department Updated successfully", icon="✅")
+                                time.sleep(3)  # This will block the UI       
                             else:
                                 st.error("Department code already exists")
                     with col2:
@@ -81,7 +83,8 @@ def render_departments_page():
                             success, message = st.session_state.data_manager.delete_department(dept_id)
                             if success:
                                 st.rerun()
-                                st.success("Department deleted successfully!")                                
+                                st.toast("Department deleted successfully!", icon="✅")
+                                time.sleep(3)  # This will block the UI       
                             else:
                                 st.error(f"Deletion failed: {message}")
         else:
@@ -99,16 +102,26 @@ def render_departments_page():
             parent_id = None
             if not is_parent and parent_options:
                 parent_id = st.selectbox(
-                    "Parent Department",
+                    "Select Parent Department*",
                     [p[0] for p in parent_options],
+                    index=None,
+                    placeholder="Select Parent Department",
                     format_func=lambda x: next((p[1] for p in parent_options if p[0] == x), None),
-                    index=0
+                    key = "ListParentDept"
                 )
             
             if st.form_submit_button("Add Department"):
-                if code and name:
+                if not is_parent and code and name and parent_id:
                     if st.session_state.data_manager.add_department(code, name, parent_id):
-                        st.success("Department added successfully")
+                        st.toast("Department added successfully", icon="✅")
+                        time.sleep(3)  # This will block the UI
+                        st.rerun()
+                    else:
+                        st.error("Department code already exists")
+                elif is_parent and code and name:
+                    if st.session_state.data_manager.add_department(code, name, parent_id):
+                        st.toast("Department added successfully", icon="✅")
+                        time.sleep(3)  # This will block the UI
                         st.rerun()
                     else:
                         st.error("Department code already exists")
