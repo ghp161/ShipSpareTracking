@@ -159,43 +159,7 @@ def make_sidebar(current_page=page_list[0]):
             st.write(f"Role: {st.session_state.user_role}")
             #print("Page list:", page_list)  # Add this temporarily
             
-            # Safely check for low stock items
-            if 'data_manager' in st.session_state:
-                try:
-                    # Alert Section in Sidebar
-                    if st.session_state.user_role == 'User':
-                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items_by_dept(st.session_state.get('user_department_id'))
-                    else:
-                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
-                    if not lpl_stock.empty:
-                        st.error(
-                            f"🚨 {len(lpl_stock)} - Last Piece Level!")
-                        with st.expander("View Last Piece Level Stock Alerts"):
-                            for _, item in lpl_stock.iterrows():
-                                st.warning(f"""
-                                    **{item['name']}**
-                                    - Current: {item['quantity']}
-                                    - Minimum: {item['min_order_level']}
-                                    - Order Quantity: {item['min_order_quantity']}
-                                """)
-                                
-                    if st.session_state.user_role == 'User':
-                        low_stock = st.session_state.data_manager.get_low_stock_items_by_dept(st.session_state.get('user_department_id'))
-                    else:
-                        low_stock = st.session_state.data_manager.get_low_stock_items()
-                    if not low_stock.empty:
-                        st.error(
-                            f"🚨 {len(low_stock)} items below minimum stock level!")
-                        with st.expander("View Low Stock Alerts"):
-                            for _, item in low_stock.iterrows():
-                                st.warning(f"""
-                                    **{item['name']}**
-                                    - Current: {item['quantity']}
-                                    - Minimum: {item['min_order_level']}
-                                    - Order Quantity: {item['min_order_quantity']}
-                                """)
-                except Exception as e:
-                    st.error(f"Error checking stock levels: {str(e)}")
+            
 
             user_role = st.session_state.get('user_role', 'user')
             #print("user_role:", user_role)  # Add this temporarily
@@ -237,6 +201,45 @@ def make_sidebar(current_page=page_list[0]):
 
                 if current_page != selected:
                     st.switch_page(pages[selected])
+            
+            # Safely check for low stock items
+            if 'data_manager' in st.session_state:
+                try:
+                    # Alert Section in Sidebar
+                    if st.session_state.user_role == 'User':
+                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items_by_dept(st.session_state.get('user_department_id'))
+                    else:
+                        lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
+                    if not lpl_stock.empty:
+                        st.error(
+                            f"🚨 {len(lpl_stock)} - Last Piece Level!")
+                        with st.expander("View Last Piece Level Stock Alerts"):
+                            for _, item in lpl_stock.iterrows():
+                                st.warning(f"""
+                                    **{item['name']}**
+                                    - Current: {item['quantity']}
+                                    - Minimum: {item['min_order_level']}
+                                    - Order Quantity: {item['min_order_quantity']}
+                                """)
+                                
+                    if st.session_state.user_role == 'User':
+                        low_stock = st.session_state.data_manager.get_low_stock_items_by_dept(st.session_state.get('user_department_id'))
+                    else:
+                        low_stock = st.session_state.data_manager.get_low_stock_items()
+                    if not low_stock.empty:
+                        st.error(
+                            f"🚨 {len(low_stock)} items below minimum stock level!")
+                        with st.expander("View Low Stock Alerts"):
+                            for _, item in low_stock.iterrows():
+                                st.warning(f"""
+                                    **{item['name']}**
+                                    - Current: {item['quantity']}
+                                    - Minimum: {item['min_order_level']}
+                                    - Order Quantity: {item['min_order_quantity']}
+                                """)
+                except Exception as e:
+                    st.error(f"Error checking stock levels: {str(e)}")
+                    
         else:
             # Show login page without sidebar
             st.set_page_config(layout="centered")
