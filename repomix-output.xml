@@ -47,7 +47,12 @@ The content is organized as follows:
 app_settings.py
 barcode_handler.py
 data_manager.py
+docs/SHIP INVENTORY MANAGEMENT SYSTEM.docx
+generated-icon.png
+inventory.db
+logo.png
 main.py
+MDL_logo.png
 navbar.py
 pages/admin.py
 pages/analytics.py
@@ -56,12 +61,14 @@ pages/inventory.py
 pages/operations.py
 pages/reports.py
 pyproject.toml
+README.md
 repl_nix_workspace.egg-info/dependency_links.txt
 repl_nix_workspace.egg-info/PKG-INFO
 repl_nix_workspace.egg-info/requires.txt
 repl_nix_workspace.egg-info/SOURCES.txt
 repl_nix_workspace.egg-info/top_level.txt
 replit.nix
+requirements.txt
 user_management.py
 utils.py
 </directory_structure>
@@ -109,6 +116,138 @@ This section contains the contents of the repository's files.
 {
   "bundles": {}
 }
+</file>
+
+<file path="README.md">
+# Ship Spare Parts Inventory Management System
+
+A barcode-based inventory tracking system for ship spare parts management with hierarchical department structure, role-based access control, and advanced reporting capabilities.
+
+## Features
+
+- 🚢 **Barcode Management**: Generate and scan barcodes with ABC-D-1234 format
+- 🏗️ **Hierarchical Departments**: Parent-child department structure with inheritance
+- 🔐 **Role-Based Access**: Three user levels (Super User, Admin, User)
+- 📊 **Advanced Analytics**: Stock levels, transaction trends, demand forecasting
+- 📦 **Bulk Operations**: CSV import/export for inventory management
+- 🚨 **Alerts**: Low stock and last piece level notifications
+- 📱 **Mobile-Friendly**: Responsive web interface
+
+## Installation
+
+### Prerequisites
+- Python 3.11+
+- pip package manager
+
+### Setup
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/ship-inventory-system.git
+   cd ship-inventory-system
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Run the application:
+   ```bash
+   streamlit run main.py
+   ```
+
+4. Access the app at `http://localhost:8501`
+
+## Configuration
+
+Edit `.streamlit/config.toml` for UI customization:
+```toml
+[theme]
+primaryColor = "#0066cc"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+```
+
+## Usage
+
+### Default Credentials
+- **Admin**: `admin` / `admin123`
+- **Roles**:
+  - Super User: Full system access
+  - Admin: Limited admin privileges
+  - User: Department-specific access
+
+### Key Modules
+1. **Inventory Management** (`pages/inventory.py`)
+   - Add/edit spare parts
+   - Bulk import via CSV
+   - Department-wise views
+
+2. **Operations** (`pages/operations.py`)
+   - Barcode scanning interface
+   - Check-in/check-out functionality
+
+3. **Reports** (`pages/reports.py`)
+   - Stock level analysis
+   - Transaction history
+   - Data export
+
+4. **User Management** (`pages/admin.py`)
+   - User creation/modification
+   - Role assignment
+
+## Database Schema
+The SQLite database (`inventory.db`) contains four main tables:
+1. `departments` - Hierarchical department structure
+2. `spare_parts` - Inventory items with barcodes
+3. `transactions` - Check-in/check-out records
+4. `users` - Authentication and access control
+
+## Deployment Options
+
+### 1. Local Development
+```bash
+streamlit run main.py
+```
+
+### 2. Docker Container
+```bash
+docker build -t ship-inventory .
+docker run -p 8501:8501 ship-inventory
+```
+
+### 3. Streamlit Sharing
+1. Create `requirements.txt` from `pyproject.toml`
+2. Deploy to Streamlit Community Cloud
+
+## Screenshots
+
+| Module | Preview |
+|--------|---------|
+| Login | ![Login Screen](screenshots/login.png) |
+| Dashboard | ![Dashboard](screenshots/dashboard.png) |
+| Barcode Scanning | ![Barcode](screenshots/barcode.png) |
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes (`git commit -am 'Add some feature'`)
+4. Push to the branch (`git push origin feature/your-feature`)
+5. Open a Pull Request
+
+## License
+
+MIT License - See [LICENSE](LICENSE) for details.
+
+## Support
+
+For issues or feature requests, please [open an issue](https://github.com/yourusername/ship-inventory-system/issues).
+
+---
+
+**Note**: Replace placeholder images and GitHub URLs with your actual project resources before publishing.
 </file>
 
 <file path="repl_nix_workspace.egg-info/dependency_links.txt">
@@ -179,6 +318,19 @@ pages
     pkgs.freetype
   ];
 }
+</file>
+
+<file path="requirements.txt">
+barcode>=1.0.4
+numpy>=2.2.3
+pandas>=2.2.3
+Pillow>=11.1.0
+plotly>=6.0.0
+python-barcode>=0.15.1
+streamlit-option-menu>=0.4.0
+streamlit>=1.43.1
+trafilatura>=2.0.0
+sqlite3>=3.35.0
 </file>
 
 <file path=".replit">
@@ -325,128 +477,6 @@ def set_page_configuration():
     """, unsafe_allow_html=True)
 </file>
 
-<file path="pages/departments.py">
-import streamlit as st
-import pandas as pd
-import sqlite3
-from user_management import login_required
-import navbar
-from app_settings import set_page_configuration
-from data_manager import DataManager
-
-set_page_configuration()
-
-current_page = "Departments"
-st.header(current_page)
-
-navbar.nav(current_page)
-    
-
-@login_required
-def render_departments_page():
-
-    tab1, tab2 = st.tabs(["Department Grid", "Add Department"])
-
-    with tab1:
-        #st.subheader("Department Data Grid")
-        
-        # Get data as DataFrame
-        df = st.session_state.data_manager.get_all_departments_as_df()
-        
-        if not df.empty:
-            # Display as interactive grid
-            st.dataframe(
-                df,
-                column_config={
-                    "id": "ID",
-                    "code": "Code",
-                    "name": "Department Name",
-                    "parent_name": "Parent Department"
-                },
-                hide_index=True,
-                use_container_width=True
-            )
-            
-            # Add edit/delete functionality
-            st.subheader("Edit Department")
-            dept_id = st.selectbox(
-                "Select Department to Edit",
-                df['id'],
-                format_func=lambda x: f"{df[df['id']==x]['code'].iloc[0]} - {df[df['id']==x]['name'].iloc[0]}"
-            )
-            
-            if dept_id:
-                dept_data = df[df['id'] == dept_id].iloc[0]
-                with st.form(f"edit_form_{dept_id}"):
-                    new_code = st.text_input("Code", value=dept_data['code'])
-                    new_name = st.text_input("Name", value=dept_data['name'])
-                    
-                    parent_options = st.session_state.data_manager.get_parent_options()
-                    current_parent = None if dept_data['parent_name'] == 'Top Level' else \
-                        next((p[0] for p in parent_options if p[1] == dept_data['parent_name']), None)
-                    
-                    parent_id = st.selectbox(
-                        "Parent Department",
-                        [None] + [p[0] for p in parent_options],
-                        format_func=lambda x: "Top Level" if x is None else \
-                            next((p[1] for p in parent_options if p[0] == x), "None"),
-                        index=0 if current_parent is None else \
-                            [p[0] for p in parent_options].index(current_parent) + 1
-                    )
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.form_submit_button("Update"):
-                            # Implement update logic
-                            if st.session_state.data_manager.update_department(dept_id, new_code, new_name, parent_id):
-                                st.rerun()
-                                st.success("Department Updated successfully")                                
-                            else:
-                                st.error("Department code already exists")
-                    with col2:
-                        if st.form_submit_button("Delete"):
-                            # Implement delete logic
-                            success, message = st.session_state.data_manager.delete_department(dept_id)
-                            if success:
-                                st.rerun()
-                                st.success("Department deleted successfully!")                                
-                            else:
-                                st.error(f"Deletion failed: {message}")
-        else:
-            st.info("No departments found")
-
-    with tab2:
-        #st.subheader("Add New Department")
-        with st.form("add_department_form"):
-            code = st.text_input("Department Code", max_chars=10)
-            name = st.text_input("Department Name")
-            
-            parent_options = st.session_state.data_manager.get_parent_options()
-            is_parent = st.checkbox("This is a top-level department", value=True)
-            
-            parent_id = None
-            if not is_parent and parent_options:
-                parent_id = st.selectbox(
-                    "Parent Department",
-                    [p[0] for p in parent_options],
-                    format_func=lambda x: next((p[1] for p in parent_options if p[0] == x), None),
-                    index=0
-                )
-            
-            if st.form_submit_button("Add Department"):
-                if code and name:
-                    if st.session_state.data_manager.add_department(code, name, parent_id):
-                        st.success("Department added successfully")
-                        st.rerun()
-                    else:
-                        st.error("Department code already exists")
-                else:
-                    st.error("Please fill in all required fields")
-
-if __name__ == "__main__":
-    render_departments_page()
-</file>
-
 <file path="utils.py">
 import pandas as pd
 import plotly.express as px
@@ -588,6 +618,141 @@ def create_demand_forecast_chart(df, part_id, days_to_forecast=30):
     )
 
     return fig
+</file>
+
+<file path="pages/departments.py">
+import streamlit as st
+import pandas as pd
+import sqlite3
+from user_management import login_required
+import navbar
+from app_settings import set_page_configuration
+from data_manager import DataManager
+import time
+
+set_page_configuration()
+
+current_page = "Departments"
+st.header(current_page)
+
+navbar.nav(current_page)
+    
+
+@login_required
+def render_departments_page():
+
+    tab1, tab2 = st.tabs(["Department Grid", "Add Department"])
+
+    with tab1:
+        #st.subheader("Department Data Grid")
+        
+        # Get data as DataFrame
+        df = st.session_state.data_manager.get_all_departments_as_df()
+        
+        if not df.empty:
+            # Display as interactive grid
+            st.dataframe(
+                df,
+                column_config={
+                    "id": "ID",
+                    "code": "Code",
+                    "name": "Department Name",
+                    "parent_name": "Parent Department"
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+            
+            # Add edit/delete functionality
+            st.subheader("Edit Department")
+            dept_id = st.selectbox(
+                "Select Department to Edit",
+                df['id'],
+                format_func=lambda x: f"{df[df['id']==x]['code'].iloc[0]} - {df[df['id']==x]['name'].iloc[0]}"
+            )
+            
+            if dept_id:
+                dept_data = df[df['id'] == dept_id].iloc[0]
+                with st.form(f"edit_form_{dept_id}"):
+                    new_code = st.text_input("Code", value=dept_data['code'])
+                    new_name = st.text_input("Name", value=dept_data['name'])
+                    
+                    parent_options = st.session_state.data_manager.get_parent_options()
+                    current_parent = None if dept_data['parent_name'] == 'Top Level' else \
+                        next((p[0] for p in parent_options if p[1] == dept_data['parent_name']), None)
+                    
+                    parent_id = st.selectbox(
+                        "Parent Department",
+                        [None] + [p[0] for p in parent_options],
+                        format_func=lambda x: "Top Level" if x is None else \
+                            next((p[1] for p in parent_options if p[0] == x), "None"),
+                        index=0 if current_parent is None else \
+                            [p[0] for p in parent_options].index(current_parent) + 1
+                    )
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button("Update"):
+                            # Implement update logic
+                            if st.session_state.data_manager.update_department(dept_id, new_code, new_name, parent_id):
+                                st.rerun()
+                                st.toast("Department Updated successfully", icon="✅")
+                                time.sleep(3)  # This will block the UI       
+                            else:
+                                st.error("Department code already exists")
+                    with col2:
+                        if st.form_submit_button("Delete"):
+                            # Implement delete logic
+                            success, message = st.session_state.data_manager.delete_department(dept_id)
+                            if success:
+                                st.rerun()
+                                st.toast("Department deleted successfully!", icon="✅")
+                                time.sleep(3)  # This will block the UI       
+                            else:
+                                st.error(f"Deletion failed: {message}")
+        else:
+            st.info("No departments found")
+
+    with tab2:
+        #st.subheader("Add New Department")
+        with st.form("add_department_form"):
+            code = st.text_input("Department Code", max_chars=10)
+            name = st.text_input("Department Name")
+            
+            parent_options = st.session_state.data_manager.get_parent_options()
+            is_parent = st.checkbox("This is a top-level department", value=True)
+            
+            parent_id = None
+            if not is_parent and parent_options:
+                parent_id = st.selectbox(
+                    "Select Parent Department*",
+                    [p[0] for p in parent_options],
+                    index=None,
+                    placeholder="Select Parent Department",
+                    format_func=lambda x: next((p[1] for p in parent_options if p[0] == x), None),
+                    key = "ListParentDept"
+                )
+            
+            if st.form_submit_button("Add Department"):
+                if not is_parent and code and name and parent_id:
+                    if st.session_state.data_manager.add_department(code, name, parent_id):
+                        st.toast("Department added successfully", icon="✅")
+                        time.sleep(3)  # This will block the UI
+                        st.rerun()
+                    else:
+                        st.error("Department code already exists")
+                elif is_parent and code and name:
+                    if st.session_state.data_manager.add_department(code, name, parent_id):
+                        st.toast("Department added successfully", icon="✅")
+                        time.sleep(3)  # This will block the UI
+                        st.rerun()
+                    else:
+                        st.error("Department code already exists")
+                else:
+                    st.error("Please fill in all required fields")
+
+if __name__ == "__main__":
+    render_departments_page()
 </file>
 
 <file path="pyproject.toml">
@@ -2617,7 +2782,7 @@ def render_inventory_page():
             if not current_user_dept_id:
                 st.error("You are not assigned to any department. Please contact administrator.")
                 return
-            print("dept_id:", current_user_dept_id)  # Add this temporarily
+            #print("dept_id:", current_user_dept_id)  # Add this temporarily
             # Show department info
             dept_info = st.session_state.data_manager.get_department_info(current_user_dept_id)
             #print("dept_info:", dept_info)  # Add this temporarily
@@ -3279,8 +3444,8 @@ def render_operations_page():
             if barcode_input:
                 is_valid, cleaned_barcode = st.session_state.barcode_handler.validate_barcode(
                     barcode_input)
-                print("barcode_input:", barcode_input)  # Add this temporarily
-                print("is_valid:", is_valid)  # Add this temporarily
+                #print("barcode_input:", barcode_input)  # Add this temporarily
+                #print("is_valid:", is_valid)  # Add this temporarily
                 if is_valid:
                     success, part = st.session_state.barcode_handler.get_part_by_barcode(
                         st.session_state.data_manager, barcode_input)

@@ -71,8 +71,8 @@ def render_operations_page():
             if barcode_input:
                 is_valid, cleaned_barcode = st.session_state.barcode_handler.validate_barcode(
                     barcode_input)
-                print("barcode_input:", barcode_input)  # Add this temporarily
-                print("is_valid:", is_valid)  # Add this temporarily
+                #print("barcode_input:", barcode_input)  # Add this temporarily
+                #print("is_valid:", is_valid)  # Add this temporarily
                 if is_valid:
                     success, part = st.session_state.barcode_handler.get_part_by_barcode(
                         st.session_state.data_manager, barcode_input)

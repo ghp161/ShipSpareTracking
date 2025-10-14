@@ -47,7 +47,7 @@ def render_inventory_page():
             if not current_user_dept_id:
                 st.error("You are not assigned to any department. Please contact administrator.")
                 return
-            print("dept_id:", current_user_dept_id)  # Add this temporarily
+            #print("dept_id:", current_user_dept_id)  # Add this temporarily
             # Show department info
             dept_info = st.session_state.data_manager.get_department_info(current_user_dept_id)
             #print("dept_info:", dept_info)  # Add this temporarily

@@ -13,6 +13,7 @@ pages = {
     'Home': 'main.py',
     'User Management': 'pages/admin.py',
     'Departments': 'pages/departments.py',
+    'Data Management': 'pages/data_management.py',  # Add this line
     'Analytics': 'pages/analytics.py',
     'Inventory': 'pages/inventory.py',
     'Operations': 'pages/operations.py',
@@ -21,7 +22,7 @@ pages = {
 }
 
 icons = [
-    'house', 'people-fill', 'building', 'graph-up-arrow', 'gear', 'toggles',
+    'house', 'people-fill', 'building', 'database', 'graph-up-arrow', 'gear', 'toggles',
     'clipboard2-data', 'box-arrow-right'
 ]
 
@@ -99,9 +100,9 @@ def nav(current_page=page_list[0]):
             elif user_role == 'Admin':
                 # Exclude User Management and Departments
                 visible_pages = [p for p in pages.keys() 
-                            if p not in ['User Management', 'Departments']]
+                            if p not in ['User Management', 'Departments', 'Data Management']]
                 visible_icons = [icon for icon, p in zip(icons, pages.keys())
-                            if p not in ['User Management', 'Departments']]
+                            if p not in ['User Management', 'Departments', 'Data Management']]
             elif user_role == 'User':
                 visible_pages = ['Inventory', 'Reports', 'Logout']
                 visible_icons = ['gear', 'clipboard2-data', 'box-arrow-right']
