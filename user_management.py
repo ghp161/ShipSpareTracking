@@ -6,6 +6,7 @@ from datetime import datetime
 import streamlit as st
 from data_manager import DataManager
 from barcode_handler import BarcodeHandler
+from session_manager import cookie_session
 
 class UserManager:
 
@@ -176,61 +177,76 @@ class UserManager:
 
 
 def init_session_state():
-    """Initialize all required session state variables"""
+    """Initialize session state with required variables"""
     required_vars = {
         'authenticated': False,
         'username': None,
         'user_role': None,
         'user_id': None,
-        'user_manager': UserManager(),
-        'data_manager': DataManager(),  # Add this line
-        'barcode_handler': BarcodeHandler()  # Add this line
+        'user_department_id': None,
+        'login_time': None
     }
     
     for var, default in required_vars.items():
         if var not in st.session_state:
             st.session_state[var] = default
+    
+    # Initialize managers
+    if 'user_manager' not in st.session_state:
+        st.session_state.user_manager = UserManager()
+        
+    if 'data_manager' not in st.session_state:
+        st.session_state.data_manager = DataManager()
+    
+    if 'barcode_handler' not in st.session_state:
+        st.session_state.barcode_handler = BarcodeHandler()
 
+def check_and_restore_session():
+    """Check for existing session and restore it"""
+    return cookie_session.check_session()
 
 def login_required(func):
     """Decorator to require login for accessing pages"""
-
     def wrapper(*args, **kwargs):
         init_session_state()
+        
+        # Check if user is authenticated
         if not st.session_state.authenticated:
-            st.warning("Please log in to access this page")
-            render_login_page()
-            return
+            # Try to restore session from cookie
+            if not check_and_restore_session():
+                st.warning("Please log in to access this page")
+                render_login_page()
+                st.stop()
+        
         return func(*args, **kwargs)
-
     return wrapper
 
-
 def render_login_page():
+    """Render login page"""
+    # Clear any existing invalid session
+    if st.session_state.get('authenticated', False):
+        cookie_session.logout()
+    
     st.image("logo.png", width=100)
     st.write("")
     st.title("Ship Inventory Management System")
 
-    # Initialize session state
-    init_session_state()
+    with st.form("login_form", clear_on_submit=True):
+        username = st.text_input("Username", key="login_username")
+        password = st.text_input("Password", type="password", key="login_password")
 
-    with st.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-
-        if st.form_submit_button("Login"):
+        if st.form_submit_button("Login", use_container_width=True):
             if username and password:
-                success, role, user_id, user_department_id, error_msg = st.session_state.user_manager.verify_user(
-                    username, password)
-                if success:
-                    st.session_state.authenticated = True
-                    st.session_state.username = username
-                    st.session_state.user_role = role
-                    st.session_state.user_id = user_id
-                    st.session_state.user_department_id = user_department_id
+                if cookie_session.login(username, password):
                     st.success(f"Welcome back, {username}!")
                     st.rerun()
                 else:
-                    st.error(error_msg or "Invalid username or password")
+                    st.error("Invalid username or password")
             else:
                 st.error("Please enter both username and password")
+
+def logout():
+    """Handle user logout"""
+    cookie_session.logout()
+    st.success("Logged out successfully!")
+    st.rerun()

@@ -1,20 +1,27 @@
 import streamlit as st
+from app_settings import set_page_configuration
+
+set_page_configuration()
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import numpy as np
-from user_management import login_required
+from user_management import login_required, init_session_state, check_and_restore_session
 import navbar
-from app_settings import set_page_configuration
 from data_manager import DataManager
 import io
 import base64
 
-set_page_configuration()
 
 current_page = "Reports"
 st.header(current_page)
+
+# Initialize session state and check for existing session
+init_session_state()
+if not st.session_state.authenticated:
+    check_and_restore_session()
 
 navbar.nav(current_page)
 
@@ -142,21 +149,17 @@ def render_executive_summary(days, department_id, user_role):
     # Key Performance Indicators
     st.write("### Key Performance Indicators")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         total_items = len(spare_parts)
         st.metric("Total Items", total_items)
     
     with col2:
-        total_value = calculate_inventory_value(spare_parts)
-        st.metric("Inventory Value", f"${total_value:,.0f}")
-    
-    with col3:
         turnover_rate = calculate_turnover_rate(transactions, spare_parts)
         st.metric("Turnover Rate", f"{turnover_rate:.1f}x")
     
-    with col4:
+    with col3:
         service_level = calculate_service_level(transactions)
         st.metric("Service Level", f"{service_level:.1f}%")
     
@@ -216,16 +219,16 @@ def render_inventory_reports(days, department_id, user_role):
     # Inventory Report Types
     report_type = st.radio(
         "Select Inventory Report",
-        ["Stock Level Analysis", "ABC Classification", "Value Analysis", "Department Summary", "Custom Inventory Report"],
+        ["Stock Level Analysis",   "Department Summary", "Custom Inventory Report"],
         horizontal=True
     )
     
     if report_type == "Stock Level Analysis":
         render_stock_level_report(spare_parts)
-    elif report_type == "ABC Classification":
-        render_abc_classification_report(spare_parts)
-    elif report_type == "Value Analysis":
-        render_value_analysis_report(spare_parts)
+    #elif report_type == "ABC Classification":
+    #    render_abc_classification_report(spare_parts)
+    #elif report_type == "Value Analysis":
+    #    render_value_analysis_report(spare_parts)
     elif report_type == "Department Summary":
         render_department_summary_report(spare_parts, user_role, department_id)
     elif report_type == "Custom Inventory Report":

@@ -3,6 +3,58 @@ from PIL import Image
 import base64
 from io import BytesIO
 
+def set_page_configuration():
+    """Set page configuration with session persistence settings"""
+    st.set_page_config(
+        page_title="Ship Inventory Management System",
+        page_icon="🚢",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Apply custom CSS for better session persistence
+    st.markdown("""
+    <style>
+        /* Your existing CSS styles */
+        .stAppHeader {
+            background-color: rgba(255, 255, 255, 0.0);
+            visibility: visible;
+        }
+
+        /* Remove blank space at top and bottom */
+        .block-container {
+            padding-top: 0rem;
+            padding-bottom: 0rem;
+        }
+        
+        /* Remove blank space at the center canvas */
+        .st-emotion-cache-z5fcl4 {
+            position: relative;
+            top: -62px;
+        }
+        
+        /* Make the toolbar transparent and the content below it clickable */
+        .st-emotion-cache-18ni7ap {
+            pointer-events: none;
+            background: rgb(255 255 255 / 0%)
+        }
+        .st-emotion-cache-zq5wmm {
+            pointer-events: auto;
+            background: rgb(255 255 255);
+            border-radius: 5px;
+        }
+        
+        /* Improve session persistence visual feedback */
+        .session-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
 def add_logo_background(logo_path="logo.png", opacity=0.4):
     """Add a visible but non-intrusive logo background"""
     try:
@@ -50,46 +102,3 @@ def add_logo_background(logo_path="logo.png", opacity=0.4):
         
     except Exception as e:
         st.error(f"Couldn't load background image: {e}")
-
-def set_page_configuration():
-    # Set page configuration
-    st.set_page_config(
-        page_title="Ship Inventory Management System",
-        page_icon="🚢",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-
-    # Reducing whitespace on the top of the page
-    st.markdown("""
-    <style>
-    
-            .stAppHeader {
-                background-color: rgba(255, 255, 255, 0.0);  /* Transparent background */
-                visibility: visible;  /* Ensure the header is visible */
-            }
-
-           /* Remove blank space at top and bottom */ 
-           .block-container {
-               padding-top: 0rem;
-               padding-bottom: 0rem;
-            }
-           
-           /* Remove blank space at the center canvas */ 
-           .st-emotion-cache-z5fcl4 {
-               position: relative;
-               top: -62px;
-               }
-           
-           /* Make the toolbar transparent and the content below it clickable */ 
-           .st-emotion-cache-18ni7ap {
-               pointer-events: none;
-               background: rgb(255 255 255 / 0%)
-               }
-           .st-emotion-cache-zq5wmm {
-               pointer-events: auto;
-               background: rgb(255 255 255);
-               border-radius: 5px;
-               }
-    </style>
-    """, unsafe_allow_html=True)

@@ -1,30 +1,37 @@
 import streamlit as st
+from app_settings import set_page_configuration
+
+set_page_configuration()
+
 from data_manager import DataManager
 from barcode_handler import BarcodeHandler
-from user_management import login_required, init_session_state, render_login_page
+from user_management import init_session_state, render_login_page, check_and_restore_session
 from navbar import make_sidebar
-from app_settings import set_page_configuration
 from datetime import datetime, timedelta
 import pandas as pd
 
-set_page_configuration()
 
 # Initialize alerts in session state
 if 'alerts' not in st.session_state:
     st.session_state.alerts = []
 
-
-@login_required
 def main():
+    """Main application entry point"""
     # Initialize session state
     init_session_state()
+    
+    # Check for existing session
+    if not st.session_state.authenticated:
+        check_and_restore_session()
+    
+    # Show appropriate content based on authentication
+    if st.session_state.authenticated:
+        show_application()
+    else:
+        render_login_page()
 
-    # Initialize data manager and barcode handler if needed
-    if 'data_manager' not in st.session_state:
-        st.session_state.data_manager = DataManager()
-    if 'barcode_handler' not in st.session_state:
-        st.session_state.barcode_handler = BarcodeHandler()
-
+def show_application():
+    
     st.title("Ship Inventory Management System")
 
     # Show user info in sidebar
@@ -32,7 +39,7 @@ def main():
         make_sidebar()
 
     # Dashboard layout
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
@@ -45,19 +52,15 @@ def main():
         st.metric("Total Parts",
                   total_parts,
                   help="Total number of unique parts in inventory")
-        
+ 
     with col2:
-        total_value = calculate_inventory_value(df)
-        st.metric("Total Inventory Value", f"${total_value:,.0f}")
-
-    with col3:
         st.metric("LPL Stock Items",
                   lpl_stock_count,
                   delta=lpl_stock_count,
                   delta_color="inverse",
                   help="Number of items below last piece level")
         
-    with col4:
+    with col3:
         active_alerts = len(low_stock) + len(lpl_stock)
         monthly_turnover = calculate_monthly_turnover()
         st.metric("Active Alerts", active_alerts, delta=active_alerts, delta_color="inverse")
@@ -359,8 +362,6 @@ def filter_transactions(transactions, days, trans_type):
         print(f"Error in filter_transactions: {e}")
         return pd.DataFrame()
 
+# Only run the main function if this is the main script
 if __name__ == "__main__":
-    if 'authenticated' not in st.session_state:
-        render_login_page()
-    else:
-        main()
+    main()

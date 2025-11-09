@@ -1,16 +1,23 @@
 import streamlit as st
-from data_manager import DataManager
-from barcode_handler import BarcodeHandler
-from user_management import login_required
-from datetime import datetime
-import navbar
 from app_settings import set_page_configuration
-import time
 
 set_page_configuration()
 
+from data_manager import DataManager
+from barcode_handler import BarcodeHandler
+from user_management import login_required, init_session_state, check_and_restore_session
+from datetime import datetime
+import navbar
+import time
+
+
 current_page = "Operations"
 st.header(current_page)
+
+# Initialize session state and check for existing session
+init_session_state()
+if not st.session_state.authenticated:
+    check_and_restore_session()
 
 navbar.nav(current_page)
 

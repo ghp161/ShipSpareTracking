@@ -1,16 +1,23 @@
 import streamlit as st
-import pandas as pd
-import sqlite3
-from user_management import login_required
-import navbar
 from app_settings import set_page_configuration
-from data_manager import DataManager
-import time
 
 set_page_configuration()
 
+import pandas as pd
+import sqlite3
+from user_management import login_required, init_session_state, check_and_restore_session
+import navbar
+from data_manager import DataManager
+import time
+
+
 current_page = "Departments"
 st.header(current_page)
+
+# Initialize session state and check for existing session
+init_session_state()
+if not st.session_state.authenticated:
+    check_and_restore_session()
 
 navbar.nav(current_page)
     

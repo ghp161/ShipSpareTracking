@@ -1,17 +1,25 @@
 import streamlit as st
-import pandas as pd  # Add this import at the top
-from data_manager import DataManager
-from barcode_handler import BarcodeHandler
-from user_management import login_required
-import navbar
-from datetime import datetime
 from app_settings import set_page_configuration
-import time
 
 set_page_configuration()
 
+import pandas as pd  # Add this import at the top
+from data_manager import DataManager
+from barcode_handler import BarcodeHandler
+from user_management import login_required, init_session_state, check_and_restore_session
+import navbar
+from datetime import datetime
+import time
+
+
+
 current_page = "Inventory"
 st.header(current_page)
+
+# Initialize session state and check for existing session
+init_session_state()
+if not st.session_state.authenticated:
+    check_and_restore_session()
 
 navbar.nav(current_page)
 
@@ -29,6 +37,10 @@ def render_inventory_page():
         st.session_state.selected_parent_dept = None
     if 'selected_child_dept' not in st.session_state:
         st.session_state.selected_child_dept = None
+    if 'selected_part' not in st.session_state:
+        st.session_state.selected_part = None
+    if 'selected_department_id' not in st.session_state:
+        st.session_state.selected_department_id = None
 
     # Get current user's department from session state
     current_user_dept_id = st.session_state.get('user_department_id')
@@ -89,6 +101,7 @@ def render_inventory_page():
                 📱 Stock information not available for selected department.
                 """)
         else:
+            # Admin/Super User view with department selection
             selected_child = ""
             cols = st.columns(2)
 
@@ -109,19 +122,21 @@ def render_inventory_page():
                 )
             
             with cols[1]:
-                child_depts = st.session_state.data_manager.get_child_departments(selected_parent)
-                if not child_depts.empty:                                
-                    selected_child = st.selectbox(
-                        "Select Child Department*",
-                        child_depts['id'].tolist(),
-                        index=None,
-                        placeholder="Select Child Department",
-                        format_func=lambda x: child_depts[child_depts['id'] == x]['name'].iloc[0],
-                        key = "ListChildDept"
-                    )
+                if selected_parent:
+                    child_depts = st.session_state.data_manager.get_child_departments(selected_parent)
+                    if not child_depts.empty:                                
+                        selected_child = st.selectbox(
+                            "Select Child Department*",
+                            child_depts['id'].tolist(),
+                            index=None,
+                            placeholder="Select Child Department",
+                            format_func=lambda x: child_depts[child_depts['id'] == x]['name'].iloc[0],
+                            key = "ListChildDept"
+                        )
 
             if selected_child is not None:
                 df = st.session_state.data_manager.get_parts_by_department(selected_child)
+                st.session_state.inventory_data = df
 
                 # Search and filter 
                 search_term = st.text_input("Search parts by name, description, part_number, box_no, compartment_no, ilms_code or barcode")
@@ -135,137 +150,60 @@ def render_inventory_page():
                             df['box_no'].str.contains(search_term, case=False)]
 
                 if not df.empty:
-                    st.dataframe(df[[
+                    #st.subheader("Inventory Items - Select a row to edit")
+                    
+                    # Create a copy for display
+                    display_df = df[[
                         'part_number', 'name', 'quantity', 'parent_department', 'child_department', 
-                        'line_no', 'description', 'page_no', 'order_no',
-                        'material_code', 'ilms_code', 'item_denomination',
-                        'mustered', 'compartment_no', 'box_no', 'remark',
-                        'min_order_level', 'barcode',
-                        'status', 'last_maintenance_date',
-                        'next_maintenance_date'
-                    ]],
-                    column_config={
-                        "mustered": st.column_config.CheckboxColumn("Mustered"),
-                        "quantity": st.column_config.NumberColumn("Qty", format="%d")
-                    },
-                    use_container_width=True,
-                    hide_index=True)
+                        'description', 'item_denomination', 'compartment_no', 'box_no', 'ilms_code', 'min_order_level', 'barcode', 'status', 'department_id'
+                    ]].copy()
+                    
+                    # Add row numbers for selection
+                    display_df['row_id'] = range(len(display_df))
+                    
+                    # Create selection form
+                    with st.form("row_selection_form"):
+                        # Display the dataframe
+                        st.dataframe(
+                            display_df.drop(columns=['row_id']),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # Selection dropdown
+                        row_options = {f"Row {i+1}: {row['part_number']} (Name: {row['name']}) (Dept: {row['department_id']})": row['row_id'] 
+                                    for i, row in display_df.iterrows()}
+                        selected_label = st.selectbox(
+                            "Select a row to edit:",
+                            options=[""] + list(row_options.keys()),
+                            key="row_selector"
+                        )
+                        
+                        submitted = st.form_submit_button("Select Row")
+                        
+                        if submitted and selected_label:
+                            selected_row_id = row_options[selected_label]
+                            selected_row = display_df[display_df['row_id'] == selected_row_id].iloc[0]
+                            
+                            # Store selection in session state
+                            st.session_state.selected_part = selected_row['part_number']
+                            st.session_state.selected_department_id = selected_row['department_id']
+                            
+                            # Rerun to show the form immediately
+                            st.rerun()
+                    
+                    # Show edit form if a row is selected
+                    if st.session_state.selected_part and st.session_state.selected_department_id:
+                        selected_part_data = df[
+                            (df['part_number'] == st.session_state.selected_part) & 
+                            (df['department_id'] == st.session_state.selected_department_id)
+                        ].iloc[0]
+                        
+                        show_edit_form(selected_part_data)
                 else:
                     st.info("""
                     📱 Stock information not available for selected department.
-                    """)
-
-                if st.session_state.user_role in ['Admin', 'Super User']:
-                    # Edit part
-                    if not df.empty:
-                        part_to_edit = st.selectbox("Select part to edit",
-                                                    df['description'].tolist())
-                        
-                        # Define available status options
-                        status_options = ["In Store", "Operational", "Under Maintenance"]
-                        
-                        if part_to_edit:
-                            part_data = df[df['description'] == part_to_edit].iloc[0]
-                            # Get current status (handle empty/NaN values)
-                            current_status = str(part_data['status']).strip() if pd.notna(part_data['status']) else None
-                            try:
-                                # Handle empty/None values first
-                                if pd.isna(part_data['last_maintenance_date']) or not part_data['last_maintenance_date']:
-                                    last_default_date = None
-                                else:
-                                    # Convert to string and parse date
-                                    date_str = str(part_data['last_maintenance_date']).strip()
-                                    last_default_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                            except (ValueError, TypeError) as e:
-                                #st.warning(f"Could not parse date: {part_data['last_maintenance_date']}. Error: {str(e)}")
-                                last_default_date = None
-
-                            try:
-                                # Handle empty/None values first
-                                if pd.isna(part_data['next_maintenance_date']) or not part_data['next_maintenance_date']:
-                                    next_default_date = None
-                                else:
-                                    # Convert to string and parse date
-                                    date_str = str(part_data['next_maintenance_date']).strip()
-                                    next_default_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                            except (ValueError, TypeError) as e:
-                                #st.warning(f"Could not parse date: {part_data['last_maintenance_date']}. Error: {str(e)}")
-                                next_default_date = None
-
-                            with st.form("edit_part_form"):
-                                new_quantity = st.number_input("Quantity",
-                                                            value=int(
-                                                                part_data['quantity']),
-                                                            min_value=0)
-                                new_min_level = st.number_input(
-                                    "Minimum Order Level",
-                                    value=int(part_data['min_order_level']),
-                                    min_value=0)
-                                new_min_quantity = st.number_input(
-                                    "Minimum Order Quantity",
-                                    value=int(part_data['min_order_quantity']),
-                                    min_value=1)                    
-                                new_status = st.selectbox(
-                                    "Status*",
-                                    options=status_options,
-                                    index=None if current_status not in status_options else status_options.index(current_status),
-                                    placeholder="Select a status...",
-                                    key=f"status_select_{part_data['id']}"
-                                )
-                                new_last_maintenance_date = st.date_input(
-                                    "Last Maintenance Date (optional)",
-                                    value=last_default_date,
-                                    key=f"last_maint_{part_data['id']}"
-                                )
-                                new_next_maintenance_date = st.date_input(
-                                    "Next Maintenance Date (optional)",
-                                    value=next_default_date,
-                                    key=f"next_maint_{part_data['id']}"
-                                )
-
-                                # Convert back to string for database
-                                if new_last_maintenance_date:
-                                    nlast_maint_date_str = new_last_maintenance_date.strftime('%Y-%m-%d')
-                                else:
-                                    nlast_maint_date_str = None
-                                
-                                if new_next_maintenance_date:
-                                    nnext_maint_date_str = new_next_maintenance_date.strftime('%Y-%m-%d')
-                                else:
-                                    nnext_maint_date_str = None
-
-                                if st.form_submit_button("Update Part"):
-                                    if new_last_maintenance_date > datetime.now().date():
-                                        st.error(
-                                            "Last Maintenance Date should not be greater than the current date."
-                                        )
-                                    elif new_next_maintenance_date <= datetime.now().date(
-                                    ):
-                                        st.error(
-                                            "Next Maintenance Date should be greater than the current date."
-                                        )
-                                    else:
-                                        st.session_state.data_manager.update_spare_part(
-                                            part_data['id'], {
-                                                'name':
-                                                part_data['name'],
-                                                'description':
-                                                part_data['description'],
-                                                'quantity':
-                                                new_quantity,
-                                                'min_order_level':
-                                                new_min_level,
-                                                'min_order_quantity':
-                                                new_min_quantity,                                   
-                                                'status':
-                                                new_status,
-                                                'last_maintenance_date':
-                                                nlast_maint_date_str,
-                                                'next_maintenance_date':
-                                                nnext_maint_date_str
-                                            })
-                                        st.success("Part updated successfully!")
-                                        st.rerun()
+                    """)                
             else:
                 st.info("""
                 📱 Please select Department to view stock information.
@@ -401,6 +339,281 @@ def render_inventory_page():
         with bulk_tab:
             bulk_import_section()
 
+
+def show_edit_form(part_data):
+    """Show edit form for selected part"""
+    st.subheader(f"Edit Part: {part_data['name']} ({part_data['part_number']})")
+
+    # Clear selection button
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("✖️ Clear Selection", use_container_width=True):
+            st.session_state.selected_part = None
+            st.session_state.selected_department_id = None
+            st.rerun()
+    
+    with col2:
+        if st.button("🗑️ Delete Part", type="secondary", use_container_width=True):
+            handle_delete_part(part_data)
+    
+    # Define available status options
+    status_options = ["In Store", "Operational", "Under Maintenance"]
+    
+    # Get current status (handle empty/NaN values)
+    current_status = str(part_data['status']).strip() if pd.notna(part_data['status']) else None
+    
+    # Handle date conversions safely
+    try:
+        if pd.isna(part_data['last_maintenance_date']) or not part_data['last_maintenance_date']:
+            last_default_date = None
+        else:
+            date_str = str(part_data['last_maintenance_date']).strip()
+            last_default_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        last_default_date = None
+
+    try:
+        if pd.isna(part_data['next_maintenance_date']) or not part_data['next_maintenance_date']:
+            next_default_date = None
+        else:
+            date_str = str(part_data['next_maintenance_date']).strip()
+            next_default_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        next_default_date = None
+
+    with st.form("edit_part_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            new_quantity = st.number_input("Quantity", value=int(part_data['quantity']), min_value=0)
+            new_min_level = st.number_input("Minimum Order Level", value=int(part_data['min_order_level']), min_value=0)
+            new_min_quantity = st.number_input("Minimum Order Quantity", value=int(part_data['min_order_quantity']), min_value=1)
+            new_status = st.selectbox(
+                "Status*",
+                options=status_options,
+                index=None if current_status not in status_options else status_options.index(current_status),
+                placeholder="Select a status...",
+                key=f"status_select_{part_data['part_number']}_{part_data['department_id']}"
+            )
+        
+        with col2:
+            new_last_maintenance_date = st.date_input(
+                "Last Maintenance Date (optional)",
+                value=last_default_date,
+                key=f"last_maint_{part_data['part_number']}_{part_data['department_id']}"
+            )
+            new_next_maintenance_date = st.date_input(
+                "Next Maintenance Date (optional)",
+                value=next_default_date,
+                key=f"next_maint_{part_data['part_number']}_{part_data['department_id']}"
+            )
+            # Display readonly fields for information
+            st.text_input("Part Number", value=part_data['part_number'], disabled=True)
+            st.text_input("Name", value=part_data['name'], disabled=True)
+            st.text_input("Barcode", value=part_data['barcode'], disabled=True)
+            st.text_input("Department", value=f"{part_data['parent_department']} - {part_data['child_department']}", disabled=True)
+
+        # Convert back to string for database
+        if new_last_maintenance_date:
+            nlast_maint_date_str = new_last_maintenance_date.strftime('%Y-%m-%d')
+        else:
+            nlast_maint_date_str = None
+        
+        if new_next_maintenance_date:
+            nnext_maint_date_str = new_next_maintenance_date.strftime('%Y-%m-%d')
+        else:
+            nnext_maint_date_str = None
+
+        if st.form_submit_button("Update Part"):
+            if new_last_maintenance_date and new_last_maintenance_date > datetime.now().date():
+                st.error("Last Maintenance Date should not be greater than the current date.")
+            elif new_next_maintenance_date and new_next_maintenance_date <= datetime.now().date():
+                st.error("Next Maintenance Date should be greater than the current date.")
+            else:
+                # Use part_number AND department_id in WHERE condition
+                success = update_part_by_part_number_and_department(
+                    part_data['part_number'],
+                    part_data['department_id'],
+                    {
+                        'quantity': new_quantity,
+                        'min_order_level': new_min_level,
+                        'min_order_quantity': new_min_quantity,
+                        'status': new_status,
+                        'last_maintenance_date': nlast_maint_date_str,
+                        'next_maintenance_date': nnext_maint_date_str
+                    }
+                )
+                if success:
+                    st.success("Part updated successfully!")
+                    time.sleep(2)
+                    st.session_state.selected_part = None
+                    st.session_state.selected_department_id = None
+                    st.rerun()
+                else:
+                    st.error("Failed to update part. Please try again.")
+
+def update_part_by_part_number_and_department(part_number, department_id, update_data):
+    """Update part using part_number AND department_id in WHERE condition"""
+    try:
+        conn = st.session_state.data_manager.conn
+        cursor = conn.cursor()
+        
+        # Build the update query dynamically based on provided fields
+        set_clauses = []
+        params = []
+        
+        if 'quantity' in update_data:
+            set_clauses.append("quantity = ?")
+            params.append(int(update_data['quantity']))  # Convert to native int
+        
+        if 'min_order_level' in update_data:
+            set_clauses.append("min_order_level = ?")
+            params.append(int(update_data['min_order_level']))  # Convert to native int
+            
+        if 'min_order_quantity' in update_data:
+            set_clauses.append("min_order_quantity = ?")
+            params.append(int(update_data['min_order_quantity']))  # Convert to native int
+            
+        if 'status' in update_data:
+            set_clauses.append("status = ?")
+            params.append(update_data['status'])
+            
+        if 'last_maintenance_date' in update_data:
+            set_clauses.append("last_maintenance_date = ?")
+            params.append(update_data['last_maintenance_date'])
+            
+        if 'next_maintenance_date' in update_data:
+            set_clauses.append("next_maintenance_date = ?")
+            params.append(update_data['next_maintenance_date'])
+        
+        # Always update last_updated
+        set_clauses.append("last_updated = ?")
+        params.append(datetime.now())
+        
+        # Convert part_number and department_id to native types
+        native_part_number = str(part_number)  # Ensure string
+        native_department_id = int(department_id)  # Convert to native int
+        
+        # Add part_number and department_id to params for WHERE clause
+        params.append(native_part_number)
+        params.append(native_department_id)
+        
+        query = f"UPDATE spare_parts SET {', '.join(set_clauses)} WHERE part_number = ? AND department_id = ?"
+        print(f"update inventory query: {query}")
+        print(f"update inventory params: {params}")
+        
+        cursor.execute(query, params)
+        conn.commit()
+        
+        # Check if any rows were affected
+        if cursor.rowcount > 0:
+            print(f"Successfully updated {cursor.rowcount} row(s)")
+            return True
+        else:
+            print("No rows were updated - check if part_number and department_id match")
+            return False
+        
+    except Exception as e:
+        st.error(f"Error updating part: {e}")
+        print(f"Detailed error: {str(e)}")
+        return False
+
+def handle_delete_part(part_data):
+    """Handle part deletion with transaction check"""
+    try:
+        conn = st.session_state.data_manager.conn
+        cursor = conn.cursor()
+        
+        # Check for transactions first
+        cursor.execute(
+            "SELECT COUNT(*) FROM transactions WHERE part_id IN (SELECT id FROM spare_parts WHERE part_number = ? AND department_id = ?)",
+            (part_data['part_number'], part_data['department_id'])
+        )
+        transaction_count = cursor.fetchone()[0]
+        
+        if transaction_count > 0:
+            # If transactions exist, ask for confirmation
+            st.warning(f"⚠️ This part has {transaction_count} transaction(s) in the system. Are you sure you want to delete it? This will also remove all associated transaction history.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"✅ Yes, Delete Part with {transaction_count} Transactions", type="primary", use_container_width=True):
+                    delete_part(part_data)
+            with col2:
+                if st.button("❌ Cancel Delete", use_container_width=True):
+                    st.info("Delete operation cancelled")
+                    # Optional: add a small delay and rerun to clear the confirmation
+                    time.sleep(1)
+                    st.rerun()
+        else:
+            # No transactions exist, proceed with deletion directly
+            st.warning("Are you sure you want to delete this part?")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Yes, Delete Part", type="primary", use_container_width=True):
+                    delete_part(part_data)
+            with col2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.info("Delete operation cancelled")
+            
+    except Exception as e:
+        st.error(f"Error checking transactions: {e}")
+
+def delete_part(part_data):
+    """Delete the selected part"""
+    try:
+        conn = st.session_state.data_manager.conn
+        cursor = conn.cursor()
+        
+        # Convert to native types
+        native_part_number = str(part_data['part_number'])
+        native_department_id = int(part_data['department_id'])
+        
+        print(f"Deleting part: {native_part_number}, department: {native_department_id}")
+        
+        # First get the part_id for debugging
+        cursor.execute(
+            "SELECT id FROM spare_parts WHERE part_number = ? AND department_id = ?",
+            (native_part_number, native_department_id)
+        )
+        part_result = cursor.fetchone()
+        
+        if part_result:
+            part_id = part_result[0]
+            print(f"Found part ID: {part_id}")
+            
+            # First delete transactions for this part
+            cursor.execute(
+                "DELETE FROM transactions WHERE part_id = ?",
+                (part_id,)
+            )
+            print(f"Deleted transactions for part ID: {part_id}")
+            
+            # Then delete the part
+            cursor.execute(
+                "DELETE FROM spare_parts WHERE part_number = ? AND department_id = ?",
+                (native_part_number, native_department_id)
+            )
+            
+            conn.commit()
+            st.success(f"Part '{part_data['name']}' deleted successfully!")
+            
+            # Clear selection
+            st.session_state.selected_part = None
+            st.session_state.selected_department_id = None
+            
+            time.sleep(2)
+            st.rerun()
+        else:
+            st.error("Part not found in database")
+            
+    except Exception as e:
+        st.error(f"Error deleting part: {e}")
+        print(f"Detailed delete error: {str(e)}")
+
+
+    
 def generate_custom_barcode(parent_dept_name, child_dept_name, last_serial_no):
     """
     Generate barcode in format: PAR-CH-SERIAL

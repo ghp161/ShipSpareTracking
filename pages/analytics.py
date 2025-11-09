@@ -1,4 +1,8 @@
 import streamlit as st
+from app_settings import set_page_configuration
+
+set_page_configuration()
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -6,15 +10,18 @@ import plotly.subplots as sp
 from plotly.colors import qualitative
 import numpy as np
 from datetime import datetime, timedelta
-from user_management import login_required
+from user_management import login_required, init_session_state, check_and_restore_session
 import navbar
-from app_settings import set_page_configuration
 from data_manager import DataManager
 
-set_page_configuration()
 
 current_page = "Analytics"
 st.header(current_page)
+
+# Initialize session state and check for existing session
+init_session_state()
+if not st.session_state.authenticated:
+    check_and_restore_session()
 
 navbar.nav(current_page)
 
@@ -51,7 +58,7 @@ def render_analytics_page():
     with col3:
         analysis_focus = st.selectbox(
             "Focus Area",
-            ["Overall Performance", "Stock Optimization", "Demand Forecasting", "Cost Analysis", "Department Analysis"]
+            ["Overall Performance", "Stock Optimization", "Demand Forecasting",  "Department Analysis"]
         )
     
     # Department selection for data filtering
@@ -136,12 +143,11 @@ def render_analytics_page():
             st.warning("Please contact administrator to assign you to a department.")
             return
 
-    # Main analytics tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # Main analytics tabs "💰 Cost Analytics",
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📈 Overview Dashboard", 
         "🔍 Stock Analysis", 
-        "📊 Demand Insights", 
-        "💰 Cost Analytics",
+        "📊 Demand Insights",         
         "📋 Detailed Reports"
     ])
 
@@ -157,11 +163,11 @@ def render_analytics_page():
         render_demand_insights(days if date_range != "Custom" else (end_date - start_date).days, 
                              selected_child, current_user_role)
     
-    with tab4:
-        render_cost_analytics(days if date_range != "Custom" else (end_date - start_date).days, 
-                            selected_child, current_user_role)
+    #with tab4:
+    #    render_cost_analytics(days if date_range != "Custom" else (end_date - start_date).days, 
+    #                        selected_child, current_user_role)
     
-    with tab5:
+    with tab4:
         render_detailed_reports(days if date_range != "Custom" else (end_date - start_date).days, 
                               selected_child, current_user_role)
 
@@ -190,17 +196,9 @@ def render_overview_dashboard(days, department_id, user_role):
         return
     
     # KPI Metrics
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        total_inventory_value = calculate_inventory_value(spare_parts)
-        st.metric(
-            "Total Inventory Value", 
-            f"${total_inventory_value:,.0f}",
-            delta=f"${calculate_value_change(transactions):,.0f}"
-        )
-    
-    with col2:
         stock_turnover = calculate_stock_turnover_rate(transactions, spare_parts)
         st.metric(
             "Stock Turnover Rate", 
@@ -208,7 +206,7 @@ def render_overview_dashboard(days, department_id, user_role):
             delta=f"{calculate_turnover_trend(transactions):.1f}x"
         )
     
-    with col3:
+    with col2:
         service_level = calculate_service_level(transactions)
         st.metric(
             "Service Level", 
@@ -216,7 +214,7 @@ def render_overview_dashboard(days, department_id, user_role):
             delta=f"{service_level - 95:.1f}%"
         )
     
-    with col4:
+    with col3:
         critical_items = len(spare_parts[spare_parts['quantity'] <= spare_parts['min_order_level']])
         st.metric(
             "Critical Items", 
@@ -415,42 +413,38 @@ def render_cost_analytics(days, department_id, user_role):
     transactions = ensure_data_consistency(transactions)
     
     # Cost metrics
-    col1, col2, col3, col4 = st.columns(4)
+    #col1, col2, col3 = st.columns(3)
     
-    with col1:
-        total_value = calculate_inventory_value(spare_parts)
-        st.metric("Total Inventory Value", f"${total_value:,.0f}")
+    #with col1:
+    #    carrying_cost = calculate_carrying_cost(spare_parts)
+    #    st.metric("Carrying Cost (Annual)", f"${carrying_cost:,.0f}")
     
-    with col2:
-        carrying_cost = calculate_carrying_cost(spare_parts)
-        st.metric("Carrying Cost (Annual)", f"${carrying_cost:,.0f}")
+    #with col2:
+    #    stockout_cost = estimate_stockout_cost(transactions, spare_parts)
+    #    st.metric("Estimated Stockout Cost", f"${stockout_cost:,.0f}")
     
-    with col3:
-        stockout_cost = estimate_stockout_cost(transactions, spare_parts)
-        st.metric("Estimated Stockout Cost", f"${stockout_cost:,.0f}")
-    
-    with col4:
-        eoq_savings = calculate_eoq_savings(spare_parts)
-        st.metric("EOQ Potential Savings", f"${eoq_savings:,.0f}")
+    #with col3:
+    #    eoq_savings = calculate_eoq_savings(spare_parts)
+    #    st.metric("EOQ Potential Savings", f"${eoq_savings:,.0f}")
     
     # Cost analysis charts
-    cost_col1, cost_col2 = st.columns(2)
+    #cost_col1, cost_col2 = st.columns(2)
     
-    with cost_col1:
-        st.plotly_chart(create_cost_analysis_chart(spare_parts), use_container_width=True)
-    
-    with cost_col2:
-        st.plotly_chart(create_value_distribution_chart(spare_parts), use_container_width=True)
+    #with cost_col1:
+    #    st.plotly_chart(create_cost_analysis_chart(spare_parts), use_container_width=True)
+    #
+    #with cost_col2:
+    #    st.plotly_chart(create_value_distribution_chart(spare_parts), use_container_width=True)
     
     # Cost optimization recommendations
-    st.subheader("💡 Cost Optimization Opportunities")
+    #st.subheader("💡 Cost Optimization Opportunities")
     
-    recommendations = generate_cost_recommendations(spare_parts, transactions)
-    for i, rec in enumerate(recommendations):
-        with st.expander(f"Opportunity {i+1}: {rec['title']}"):
-            st.write(f"**Potential Savings:** ${rec['savings']:,.0f}")
-            st.write(rec['description'])
-            st.write(f"**Implementation:** {rec['implementation']}")
+    #recommendations = generate_cost_recommendations(spare_parts, transactions)
+    #for i, rec in enumerate(recommendations):
+    #    with st.expander(f"Opportunity {i+1}: {rec['title']}"):
+    #        st.write(f"**Potential Savings:** ${rec['savings']:,.0f}")
+    #        st.write(rec['description'])
+    #        st.write(f"**Implementation:** {rec['implementation']}")
 
 def render_detailed_reports(days, department_id, user_role):
     """Detailed analytical reports"""
@@ -460,10 +454,7 @@ def render_detailed_reports(days, department_id, user_role):
         "Select Report Type",
         [
             "Inventory Performance Report",
-            "Stock Optimization Report", 
-            "Demand Analysis Report",
-            "Cost Analysis Report",
-            "Department Performance Report"
+            "Stock Optimization Report"
         ]
     )
     
@@ -471,12 +462,12 @@ def render_detailed_reports(days, department_id, user_role):
         generate_inventory_performance_report(days, department_id, user_role)
     elif report_type == "Stock Optimization Report":
         generate_stock_optimization_report(days, department_id, user_role)
-    elif report_type == "Demand Analysis Report":
-        generate_demand_analysis_report(days, department_id, user_role)
-    elif report_type == "Cost Analysis Report":
-        generate_cost_analysis_report(days, department_id, user_role)
-    elif report_type == "Department Performance Report":
-        generate_department_performance_report(days, department_id, user_role)
+    #elif report_type == "Demand Analysis Report":
+    #    generate_demand_analysis_report(days, department_id, user_role)
+    #elif report_type == "Cost Analysis Report":
+    #    generate_cost_analysis_report(days, department_id, user_role)
+    #elif report_type == "Department Performance Report":
+    #    generate_department_performance_report(days, department_id, user_role)
 
 # =============================================================================
 # CHART CREATION FUNCTIONS

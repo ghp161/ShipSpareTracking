@@ -1,19 +1,28 @@
 import streamlit as st
-import pandas as pd
-from user_management import login_required
-import navbar
 from app_settings import set_page_configuration
-from datetime import datetime
 
 set_page_configuration()
 
+import pandas as pd
+from user_management import login_required, init_session_state, check_and_restore_session
+import navbar
+from datetime import datetime
+
+
 current_page = "User Management"
 st.header(current_page)
+
+# Initialize session state and check for existing session
+init_session_state()
+if not st.session_state.authenticated:
+    check_and_restore_session()
 
 navbar.nav(current_page)
 
 @login_required
 def render_admin_page():
+
+
     if st.session_state.user_role in ['Admin', 'User']:
         st.error("You don't have permission to access this page")
         return
