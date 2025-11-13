@@ -118,7 +118,8 @@ def ensure_numeric_dataframe(df, numeric_columns=None):
     
     for col in numeric_columns:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            # Use float for decimal quantities instead of int
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
     
     return df
 
@@ -193,10 +194,10 @@ def render_executive_summary(days, department_id, user_role):
     
     # Export Executive Summary
     st.download_button(
-        "📥 Download Executive Summary",
-        generate_executive_summary_pdf(spare_parts, transactions),
-        file_name=f"executive_summary_{datetime.now().strftime('%Y%m%d')}.pdf",
-        mime="application/pdf"
+        "📥 Download Executive Summary (CSV)",
+        generate_executive_summary_csv(spare_parts, transactions),
+        file_name=f"executive_summary_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv"
     )
 
 def render_inventory_reports(days, department_id, user_role):
@@ -387,11 +388,11 @@ def ensure_data_consistency(df, expected_columns=None):
     
     df = df.copy()
     
-    # Ensure numeric columns are properly typed
+    # Ensure numeric columns are properly typed - use float for decimal quantities
     numeric_columns = ['quantity', 'min_order_level', 'min_order_quantity', 'line_no']
     for col in numeric_columns:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
     
     # Handle department information
     if 'child_department' not in df.columns and 'department_id' in df.columns:
@@ -430,23 +431,23 @@ def render_performance_reports(days, department_id, user_role):
             transactions = st.session_state.data_manager.get_transaction_history(days=days)
     
     # Performance Metrics
-    perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
+    # perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
     
-    with perf_col1:
-        stock_accuracy = calculate_stock_accuracy(spare_parts, transactions)
-        st.metric("Stock Accuracy", f"{stock_accuracy}%")
+    # with perf_col1:
+    #     stock_accuracy = calculate_stock_accuracy(spare_parts, transactions)
+    #     st.metric("Stock Accuracy", f"{stock_accuracy}%")
     
-    with perf_col2:
-        fill_rate = calculate_fill_rate(transactions)
-        st.metric("Fill Rate", f"{fill_rate}%")
+    # with perf_col2:
+    #     fill_rate = calculate_fill_rate(transactions)
+    #     st.metric("Fill Rate", f"{fill_rate}%")
     
-    with perf_col3:
-        carrying_cost = calculate_carrying_cost(spare_parts)
-        st.metric("Carrying Cost", f"${carrying_cost:,.0f}")
+    # with perf_col3:
+    #     carrying_cost = calculate_carrying_cost(spare_parts)
+    #     st.metric("Carrying Cost", f"${carrying_cost:,.0f}")
     
-    with perf_col4:
-        optimal_stock = calculate_optimal_stock_percentage(spare_parts)
-        st.metric("Optimal Stock", f"{optimal_stock}%")
+    # with perf_col4:
+    #     optimal_stock = calculate_optimal_stock_percentage(spare_parts)
+    #     st.metric("Optimal Stock", f"{optimal_stock}%")
     
     # Performance Charts
     chart_col1, chart_col2 = st.columns(2)
@@ -475,8 +476,8 @@ def render_stock_level_report(spare_parts):
     
     spare_parts = spare_parts.copy()
     
-    # Ensure numeric column
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
+    # Ensure numeric column - use float for decimal quantities
+    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0.0)
     
     # Stock level distribution
     fig = px.histogram(
@@ -496,10 +497,10 @@ def render_stock_level_report(spare_parts):
         summary_data = {
             'Metric': ['Average Stock', 'Median Stock', 'Max Stock', 'Min Stock'],
             'Value': [
-                spare_parts['quantity'].mean(),
-                spare_parts['quantity'].median(),
-                spare_parts['quantity'].max(),
-                spare_parts['quantity'].min()
+                f"{spare_parts['quantity'].mean():.2f}",  # Format for decimals
+                f"{spare_parts['quantity'].median():.2f}",
+                f"{spare_parts['quantity'].max():.2f}",
+                f"{spare_parts['quantity'].min():.2f}"
             ]
         }
         st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
@@ -509,8 +510,8 @@ def render_stock_level_report(spare_parts):
         # Use pandas cut with proper numeric conversion
         ranges = pd.cut(
             spare_parts['quantity'], 
-            bins=[0, 1, 5, 10, 20, 50, 100, float('inf')],
-            labels=['0', '1-5', '6-10', '11-20', '21-50', '51-100', '100+']
+            bins=[0, 0.1, 1, 5, 10, 20, 50, 100, float('inf')],  # Added 0.1 for small decimal quantities
+            labels=['0', '0.1-1', '1-5', '6-10', '11-20', '21-50', '51-100', '100+']
         )
         range_counts = ranges.value_counts().sort_index()
         st.dataframe(range_counts, use_container_width=True)
@@ -518,7 +519,7 @@ def render_stock_level_report(spare_parts):
     # Export stock level report
     st.download_button(
         "📥 Download Stock Level Report",
-        spare_parts.to_csv(index=False),
+        spare_parts.to_csv(index=False, float_format='%.2f'),  # Format floats in CSV
         file_name=f"stock_level_report_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv"
     )
@@ -561,7 +562,7 @@ def render_abc_classification_report(spare_parts):
         # Export ABC report
         st.download_button(
             "📥 Download ABC Classification Report",
-            abc_data.to_csv(index=False),
+            abc_data.to_csv(index=False, float_format='%.2f'),
             file_name=f"abc_classification_report_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv"
         )
@@ -710,7 +711,7 @@ def render_custom_inventory_report(spare_parts):
         # Export custom report
         st.download_button(
             "📥 Download Custom Report",
-            filtered_data.to_csv(index=False),
+            filtered_data.to_csv(index=False, float_format='%.2f'),
             file_name=f"custom_inventory_report_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv"
         )
@@ -761,7 +762,7 @@ def render_transaction_history_report(transactions):
         # Export transaction history
         st.download_button(
             "📥 Download Transaction History",
-            filtered_transactions.to_csv(index=False),
+            filtered_transactions.to_csv(index=False, float_format='%.2f'),
             file_name=f"transaction_history_{start_date}_{end_date}.csv",
             mime="text/csv"
         )
@@ -772,35 +773,56 @@ def render_movement_analysis_report(transactions):
     """Render item movement analysis report"""
     st.write("### Item Movement Analysis")
     
-    # Movement analysis
-    movement_data = transactions.groupby(['name', 'transaction_type']).agg({
-        'quantity': 'sum',
-        'timestamp': 'count'
-    }).reset_index()
+    # Ensure quantity is numeric for calculations
+    transactions = transactions.copy()
+    transactions['quantity'] = pd.to_numeric(transactions['quantity'], errors='coerce').fillna(0.0)
     
-    # Pivot for better visualization
-    movement_pivot = movement_data.pivot_table(
+    # Get top items by total movement (absolute value)
+    total_movement = transactions.groupby('name')['quantity'].sum().abs()
+    top_items = total_movement.nlargest(10).index.tolist()
+    
+    # Filter transactions for top items
+    top_transactions = transactions[transactions['name'].isin(top_items)]
+    
+    if top_transactions.empty:
+        st.info("No transaction data available for movement analysis")
+        return
+    
+    # Aggregate by item and transaction type
+    movement_summary = top_transactions.groupby(['name', 'transaction_type'])['quantity'].sum().reset_index()
+    
+    # Create the bar chart
+    fig = px.bar(
+        movement_summary,
+        x='name',
+        y='quantity',
+        color='transaction_type',
+        title="Top 10 Moving Items",
+        barmode='group',
+        color_discrete_map={'check_in': 'green', 'check_out': 'red'}
+    )
+    
+    fig.update_layout(
+        xaxis_title="Item Name",
+        yaxis_title="Quantity",
+        height=500
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Also show the pivot table
+    movement_pivot = movement_summary.pivot_table(
         index='name', 
         columns='transaction_type', 
         values='quantity', 
         aggfunc='sum'
-    ).fillna(0)
+    ).fillna(0.0)
     
-    movement_pivot['net_movement'] = movement_pivot.get('check_in', 0) - movement_pivot.get('check_out', 0)
-    movement_pivot = movement_pivot.sort_values('net_movement', ascending=False)
+    movement_pivot['net_movement'] = movement_pivot.get('check_in', 0.0) - movement_pivot.get('check_out', 0.0)
+    movement_pivot = movement_pivot.sort_values('net_movement', ascending=False).round(2)
     
+    st.write("**Movement Summary**")
     st.dataframe(movement_pivot, use_container_width=True)
-    
-    # Top movers chart
-    top_movers = movement_pivot.head(10)
-    fig = px.bar(
-        top_movers.reset_index(),
-        x='name',
-        y=['check_in', 'check_out'],
-        title="Top 10 Moving Items",
-        barmode='group'
-    )
-    st.plotly_chart(fig, use_container_width=True)
 
 def render_trend_analysis_report(transactions, days):
     """Render transaction trend analysis"""
@@ -871,7 +893,7 @@ def render_custom_transaction_report(transactions):
         
         st.download_button(
             "📥 Download Custom Transaction Report",
-            filtered_data.to_csv(index=False),
+            filtered_data.to_csv(index=False, float_format='%.2f'),
             file_name=f"custom_transaction_report_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv"
         )
@@ -882,24 +904,24 @@ def render_reordering_recommendations(spare_parts):
     
     spare_parts = spare_parts.copy()
     
-    # Ensure numeric columns
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
-    spare_parts['min_order_quantity'] = pd.to_numeric(spare_parts['min_order_quantity'], errors='coerce').fillna(1)
+    # Ensure numeric columns - use float for decimal quantities
+    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0.0)
+    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0.0)
+    spare_parts['min_order_quantity'] = pd.to_numeric(spare_parts['min_order_quantity'], errors='coerce').fillna(1.0)  # Use float
     
-    # Calculate reorder needs
+    # Calculate reorder needs - use float comparisons
     reorder_needs = spare_parts[
         (spare_parts['quantity'] <= spare_parts['min_order_level']) & 
-        (spare_parts['quantity'] > 0)
+        (spare_parts['quantity'] > 0.0)  # Use float comparison
     ].copy()
     
     if not reorder_needs.empty:
         reorder_needs['reorder_quantity'] = reorder_needs['min_order_quantity']
         
-        # Calculate priority using pandas operations
+        # Calculate priority using pandas operations with float comparisons
         priority = []
         for _, row in reorder_needs.iterrows():
-            if row['quantity'] == 1:
+            if row['quantity'] <= 1.0:  # Use float comparison
                 priority.append('🚨 CRITICAL')
             elif row['quantity'] <= row['min_order_level'] * 0.5:
                 priority.append('⚠️ HIGH')
@@ -908,28 +930,26 @@ def render_reordering_recommendations(spare_parts):
         
         reorder_needs['priority'] = priority
         
-        # Priority summary
-        priority_summary = reorder_needs.groupby('priority').agg({
-            'name': 'count',
-            'reorder_quantity': 'sum'
-        }).rename(columns={'name': 'item_count'})
-        
-        st.write("**Reorder Priority Summary**")
-        st.dataframe(priority_summary, use_container_width=True)
-        
-        # Detailed reorder list
-        st.write("**Detailed Reorder List**")
-        reorder_display = reorder_needs[[
+        # Format quantities for display
+        display_data = reorder_needs[[
             'name', 'part_number', 'quantity', 'min_order_level', 
             'reorder_quantity', 'priority', 'child_department'
-        ]].sort_values('priority')
+        ]].copy()
         
-        st.dataframe(reorder_display, use_container_width=True)
+        # Round quantities for display
+        display_data['quantity'] = display_data['quantity'].round(2)
+        display_data['min_order_level'] = display_data['min_order_level'].round(2)
+        display_data['reorder_quantity'] = display_data['reorder_quantity'].round(2)
         
-        # Generate purchase order
+        st.dataframe(display_data.sort_values('priority'), use_container_width=True)
+        
+        # Generate purchase order with formatted quantities
+        po_data = reorder_needs[['name', 'part_number', 'reorder_quantity', 'priority']].copy()
+        po_data['reorder_quantity'] = po_data['reorder_quantity'].round(2)
+        
         st.download_button(
             "🛒 Generate Purchase Order List",
-            reorder_needs[['name', 'part_number', 'reorder_quantity', 'priority']].to_csv(index=False),
+            po_data.to_csv(index=False, float_format='%.2f'),  # Format floats
             file_name=f"purchase_order_list_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv"
         )
@@ -993,20 +1013,20 @@ def create_inventory_health_chart(spare_parts):
         fig.add_annotation(text="No data available", x=0.5, y=0.5, showarrow=False)
         return fig
     
-    # Ensure we're working with proper data types
+    # Ensure we're working with proper data types - use float
     spare_parts = spare_parts.copy()
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
+    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0.0)
+    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0.0)
     
-    # Create health status using pandas operations instead of np.select
+    # Create health status with float comparisons
     health_status = []
     for _, row in spare_parts.iterrows():
         quantity = row['quantity']
         min_order_level = row['min_order_level']
         
-        if quantity == 0:
+        if quantity <= 0.0:  # Use float comparison
             health_status.append('Out of Stock')
-        elif quantity == 1:
+        elif quantity <= 1.0:  # Use float comparison
             health_status.append('Last Piece')
         elif quantity <= min_order_level:
             health_status.append('Low Stock')
@@ -1059,8 +1079,12 @@ def get_top_moving_items(transactions, top_n=5):
     if transactions.empty:
         return []
     
+    # Ensure quantity is numeric
+    transactions = transactions.copy()
+    transactions['quantity'] = pd.to_numeric(transactions['quantity'], errors='coerce').fillna(0.0)
+    
     top_movers = transactions.groupby('name')['quantity'].sum().abs().nlargest(top_n)
-    return [{'name': name, 'quantity': int(qty)} for name, qty in top_movers.items()]
+    return [{'name': name, 'quantity': float(qty)} for name, qty in top_movers.items()]  # Use float
 
 def get_critical_items(spare_parts, top_n=3):
     """Get most critical items needing attention"""
@@ -1069,9 +1093,9 @@ def get_critical_items(spare_parts, top_n=3):
     
     spare_parts = spare_parts.copy()
     
-    # Ensure numeric columns
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
+    # Ensure numeric columns - use float for decimal quantities
+    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0.0)
+    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0.0)
     
     critical = spare_parts[
         spare_parts['quantity'] <= spare_parts['min_order_level']
@@ -1079,8 +1103,8 @@ def get_critical_items(spare_parts, top_n=3):
     
     return [{
         'name': str(row['name']),
-        'quantity': int(row['quantity']),
-        'min_level': int(row['min_order_level'])
+        'quantity': float(row['quantity']),  # Use float instead of int
+        'min_level': float(row['min_order_level'])  # Use float instead of int
     } for _, row in critical.iterrows()]
 
 def perform_abc_analysis(spare_parts):
@@ -1154,9 +1178,24 @@ def create_department_comparison_chart(spare_parts, transactions):
     fig.add_annotation(text="Department comparison analysis", x=0.5, y=0.5, showarrow=False)
     return fig
 
-def generate_executive_summary_pdf(spare_parts, transactions):
-    """Generate executive summary PDF (placeholder)"""
-    return "PDF generation would be implemented here".encode()
+def generate_executive_summary_csv(spare_parts, transactions):
+    """Generate executive summary as CSV"""
+    try:
+        # Create summary data
+        summary_data = {
+            'Report Type': ['Executive Summary'],
+            'Generated Date': [datetime.now().strftime('%Y-%m-%d %H:%M')],
+            'Total Items': [len(spare_parts)],
+            'Inventory Turnover Rate': [f"{calculate_turnover_rate(transactions, spare_parts):.1f}x"],
+            'Service Level': [f"{calculate_service_level(transactions):.1f}%"],
+            'Total Inventory Value': [f"${calculate_inventory_value(spare_parts):,.0f}"]
+        }
+        
+        summary_df = pd.DataFrame(summary_data)
+        return summary_df.to_csv(index=False).encode()
+        
+    except Exception as e:
+        return f"Error generating report: {str(e)}".encode()
 
 def generate_reorder_list(last_piece_items):
     """Generate reorder list CSV"""
@@ -1195,7 +1234,7 @@ def generate_reorder_list(last_piece_items):
     # Only include columns that exist
     available_columns = [col for col in reorder_columns if col in reorder_data.columns]
     
-    return reorder_data[available_columns].to_csv(index=False).encode()
+    return reorder_data[available_columns].to_csv(index=False, float_format='%.2f').encode()
 
 if __name__ == "__main__":
     render_reports_page()

@@ -9,7 +9,7 @@ pages = {
     'Home': 'main.py',
     'User Management': 'pages/admin.py',
     'Departments': 'pages/departments.py',
-    'Data Management': 'pages/data_management.py',
+    #'Data Management': 'pages/data_management.py', 'database',
     'Analytics': 'pages/analytics.py',
     'Inventory': 'pages/inventory.py',
     'Operations': 'pages/operations.py',
@@ -18,7 +18,7 @@ pages = {
 }
 
 icons = [
-    'house', 'people-fill', 'building', 'database', 'graph-up-arrow', 
+    'house', 'people-fill', 'building',  'graph-up-arrow', 
     'gear', 'toggles', 'clipboard2-data', 'box-arrow-right'
 ]
 
@@ -63,9 +63,9 @@ def get_visible_pages(user_role):
         return list(pages.keys()), icons
     elif user_role == 'Admin':
         visible_pages = [p for p in pages.keys() 
-                        if p not in ['User Management', 'Departments', 'Data Management']]
+                        if p not in ['User Management', 'Departments']]
         visible_icons = [icon for icon, p in zip(icons, pages.keys())
-                        if p not in ['User Management', 'Departments', 'Data Management']]
+                        if p not in ['User Management', 'Departments']]
         return visible_pages, visible_icons
     elif user_role == 'User':
         return ['Inventory', 'Reports', 'Logout'], \

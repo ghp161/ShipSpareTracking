@@ -27,86 +27,88 @@ navbar.nav(current_page)
 
 @login_required
 def render_analytics_page():
-    st.title("📊 Advanced Inventory Analytics")
+    #st.title("📊 Advanced Inventory Analytics")
     
     # Initialize session state
     if 'data_manager' not in st.session_state:
         st.session_state.data_manager = DataManager()
     
-    # Date range selector
-    col1, col2, col3 = st.columns([1, 1, 2])
-    with col1:
-        date_range = st.selectbox(
-            "Analysis Period",
-            ["Last 30 Days", "Last 90 Days", "Last 6 Months", "Last Year", "Custom"],
-            index=1
-        )
+    with st.expander("🔧 **Analysis Configuration**", expanded=True):
+        # Date range selector
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            date_range = st.selectbox(
+                "Analysis Period",
+                ["Last 30 Days", "Last 90 Days", "Last 6 Months", "Last Year", "Custom"],
+                index=1
+            )
+        
+        with col2:
+            if date_range == "Custom":
+                start_date = st.date_input("Start Date", datetime.now() - timedelta(days=90))
+                end_date = st.date_input("End Date", datetime.now())
+            else:
+                days_map = {
+                    "Last 30 Days": 30,
+                    "Last 90 Days": 90,
+                    "Last 6 Months": 180,
+                    "Last Year": 365
+                }
+                days = days_map.get(date_range, 90)
+        
+        with col3:
+            analysis_focus = st.selectbox(
+                "Focus Area",
+                ["Overall Performance", "Stock Optimization", "Demand Forecasting",  "Department Analysis"]
+            )
     
-    with col2:
-        if date_range == "Custom":
-            start_date = st.date_input("Start Date", datetime.now() - timedelta(days=90))
-            end_date = st.date_input("End Date", datetime.now())
+    with st.expander("🔍 **Data Selection & Filters**", expanded=True):
+        # Department selection for data filtering
+        #st.subheader("🔍 Data Selection")
+        
+        # Get current user's role and department
+        current_user_role = st.session_state.get('user_role')
+        current_user_dept_id = st.session_state.get('user_department_id')
+        
+        selected_child = None
+        selected_parent = None
+        
+        if current_user_role == 'User':
+            # Regular users can only see their own department
+            selected_child = current_user_dept_id
+            if selected_child:
+                dept_info = st.session_state.data_manager.get_department_info(selected_child)
+                if dept_info is not None and not dept_info.empty:
+                    st.info(f"📋 Viewing data for: {dept_info['child_department']} - {dept_info['parent_department']}")
         else:
-            days_map = {
-                "Last 30 Days": 30,
-                "Last 90 Days": 90,
-                "Last 6 Months": 180,
-                "Last Year": 365
-            }
-            days = days_map.get(date_range, 90)
-    
-    with col3:
-        analysis_focus = st.selectbox(
-            "Focus Area",
-            ["Overall Performance", "Stock Optimization", "Demand Forecasting",  "Department Analysis"]
-        )
-    
-    # Department selection for data filtering
-    st.subheader("🔍 Data Selection")
-    
-    # Get current user's role and department
-    current_user_role = st.session_state.get('user_role')
-    current_user_dept_id = st.session_state.get('user_department_id')
-    
-    selected_child = None
-    selected_parent = None
-    
-    if current_user_role == 'User':
-        # Regular users can only see their own department
-        selected_child = current_user_dept_id
-        if selected_child:
-            dept_info = st.session_state.data_manager.get_department_info(selected_child)
-            if dept_info is not None and not dept_info.empty:
-                st.info(f"📋 Viewing data for: {dept_info['child_department']} - {dept_info['parent_department']}")
-    else:
-        # Admin/Super User can select departments
-        cols = st.columns(2)
-        
-        with cols[0]:
-            # Department selection
-            parent_depts = st.session_state.data_manager.get_parent_departments()
-            if not parent_depts.empty:
-                selected_parent = st.selectbox(
-                    "Select Parent Department",
-                    parent_depts['id'].tolist(),
-                    index=0,
-                    placeholder="Select Parent Department",
-                    format_func=lambda x: parent_depts[parent_depts['id'] == x]['name'].iloc[0],
-                    key="analytics_parent_dept"
-                )
-        
-        with cols[1]:
-            if selected_parent:
-                child_depts = st.session_state.data_manager.get_child_departments(selected_parent)
-                if not child_depts.empty:                                
-                    selected_child = st.selectbox(
-                        "Select Child Department",
-                        child_depts['id'].tolist(),
+            # Admin/Super User can select departments
+            cols = st.columns(2)
+            
+            with cols[0]:
+                # Department selection
+                parent_depts = st.session_state.data_manager.get_parent_departments()
+                if not parent_depts.empty:
+                    selected_parent = st.selectbox(
+                        "Select Parent Department",
+                        parent_depts['id'].tolist(),
                         index=0,
-                        placeholder="Select Child Department",
-                        format_func=lambda x: child_depts[child_depts['id'] == x]['name'].iloc[0],
-                        key="analytics_child_dept"
+                        placeholder="Select Parent Department",
+                        format_func=lambda x: parent_depts[parent_depts['id'] == x]['name'].iloc[0],
+                        key="analytics_parent_dept"
                     )
+            
+            with cols[1]:
+                if selected_parent:
+                    child_depts = st.session_state.data_manager.get_child_departments(selected_parent)
+                    if not child_depts.empty:                                
+                        selected_child = st.selectbox(
+                            "Select Child Department",
+                            child_depts['id'].tolist(),
+                            index=0,
+                            placeholder="Select Child Department",
+                            format_func=lambda x: child_depts[child_depts['id'] == x]['name'].iloc[0],
+                            key="analytics_child_dept"
+                        )
     
     # Get data with consistency checks
     df = pd.DataFrame()
@@ -143,7 +145,7 @@ def render_analytics_page():
             st.warning("Please contact administrator to assign you to a department.")
             return
 
-    # Main analytics tabs "💰 Cost Analytics",
+    # Main analytics tabs
     tab1, tab2, tab3, tab4 = st.tabs([
         "📈 Overview Dashboard", 
         "🔍 Stock Analysis", 
@@ -163,16 +165,22 @@ def render_analytics_page():
         render_demand_insights(days if date_range != "Custom" else (end_date - start_date).days, 
                              selected_child, current_user_role)
     
-    #with tab4:
-    #    render_cost_analytics(days if date_range != "Custom" else (end_date - start_date).days, 
-    #                        selected_child, current_user_role)
-    
     with tab4:
         render_detailed_reports(days if date_range != "Custom" else (end_date - start_date).days, 
                               selected_child, current_user_role)
 
 def render_overview_dashboard(days, department_id, user_role):
     """Overview dashboard with performance metrics"""
+    
+    with st.expander("📊 **Performance Overview - Methodology**", expanded=False):
+        st.write("""
+        **Data Used**: Current inventory levels + Transaction history
+        **Calculations**:
+        - Stock Turnover: Total check-outs ÷ Average inventory quantity
+        - Service Level: Based on transaction fulfillment (simplified)
+        - Critical Items: Count of items at/below minimum order levels
+        """)
+    
     st.subheader("🏆 Performance Overview")
     
     # Get data based on user role and department
@@ -227,10 +235,25 @@ def render_overview_dashboard(days, department_id, user_role):
     chart_col1, chart_col2 = st.columns(2)
     
     with chart_col1:
+        with st.expander("📈 **Monthly Trends - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Transaction history grouped by month
+            **Calculation**: Count of check-in/check-out transactions per month
+            **Purpose**: Identify seasonal patterns and activity trends
+            """)
         fig = create_monthly_trend_chart(transactions)
         st.plotly_chart(fig, use_container_width=True)
     
     with chart_col2:
+        with st.expander("🩺 **Inventory Health - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Current stock levels + Minimum order levels
+            **Categories**:
+            - Healthy: Above minimum order level
+            - Low Stock: At/below minimum but above 1
+            - Last Piece: Only 1 item remaining
+            - Out of Stock: Zero quantity
+            """)
         fig = create_inventory_health_chart(spare_parts)
         st.plotly_chart(fig, use_container_width=True)
     
@@ -238,15 +261,40 @@ def render_overview_dashboard(days, department_id, user_role):
     chart_col3, chart_col4 = st.columns(2)
     
     with chart_col3:
+        with st.expander("🏗️ **Department Performance - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Transactions merged with department info
+            **Calculation**: Transaction counts and quantities by department
+            **Purpose**: Compare activity levels across departments
+            """)
         fig = create_department_performance_chart(transactions, spare_parts)
         st.plotly_chart(fig, use_container_width=True)
     
     with chart_col4:
+        with st.expander("📊 **ABC Analysis - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Inventory items with quantities and min order levels
+            **Calculation**: Criticality score = quantity × min_order_level
+            **Classification**:
+            - A (Top 80% of criticality): High priority items
+            - B (Next 15%): Medium priority items  
+            - C (Bottom 5%): Low priority items
+            """)
         fig = create_abc_analysis_chart(spare_parts)
         st.plotly_chart(fig, use_container_width=True)
 
 def render_stock_analysis(days, department_id, user_role):
     """Stock optimization analysis"""
+    
+    with st.expander("🔍 **Stock Optimization - Methodology**", expanded=False):
+        st.write("""
+        **Data Used**: Current inventory levels + Transaction patterns
+        **Key Metrics**:
+        - Excess Stock: Items with quantity > 3× minimum order level
+        - Stockout Risk: Items at/below minimum order level
+        - Optimal Achievement: Percentage of items above minimum levels
+        """)
+    
     st.subheader("🔍 Stock Optimization Analysis")
     
     # Get data based on access
@@ -273,8 +321,8 @@ def render_stock_analysis(days, department_id, user_role):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        excess_stock = calculate_excess_stock_value(spare_parts)
-        st.metric("Excess Stock Value", f"${excess_stock:,.0f}")
+        excess_stock = calculate_excess_stock_count(spare_parts)
+        st.metric("Excess Stock Items", excess_stock)
     
     with col2:
         stockout_risk = calculate_stockout_risk(spare_parts)
@@ -288,6 +336,12 @@ def render_stock_analysis(days, department_id, user_role):
     tab1, tab2, tab3 = st.tabs(["ABC Analysis", "Stock Levels", "Reorder Analysis"])
     
     with tab1:
+        with st.expander("📈 **Detailed ABC Analysis - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Inventory items sorted by criticality score
+            **Pareto Chart**: Shows top 20 items by criticality with cumulative percentage
+            **Purpose**: Identify items that deserve most management attention
+            """)
         col1, col2 = st.columns([2, 1])
         with col1:
             st.plotly_chart(create_detailed_abc_chart(spare_parts), use_container_width=True)
@@ -296,6 +350,13 @@ def render_stock_analysis(days, department_id, user_role):
             st.dataframe(abc_summary, use_container_width=True)
     
     with tab2:
+        with st.expander("🔍 **Stock Level Analysis - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Current quantities vs minimum order levels
+            **Scatter Plot**: Each point represents an item's current vs required stock
+            **Reference Lines**: Median current quantity and median minimum level
+            **Purpose**: Visualize overstocked and understocked items
+            """)
         st.plotly_chart(create_stock_level_analysis_chart(spare_parts), use_container_width=True)
         
         # Stock level recommendations
@@ -309,10 +370,27 @@ def render_stock_analysis(days, department_id, user_role):
                                use_container_width=True)
     
     with tab3:
+        with st.expander("🔄 **Reorder Analysis - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Inventory levels + Transaction history
+            **Purpose**: Analyze reorder patterns and timing (placeholder implementation)
+            **Future**: Will incorporate lead times and demand patterns
+            """)
         st.plotly_chart(create_reorder_analysis_chart(spare_parts, transactions), use_container_width=True)
 
 def render_demand_insights(days, department_id, user_role):
     """Demand pattern analysis"""
+    
+    with st.expander("📊 **Demand Analysis - Methodology**", expanded=False):
+        st.write("""
+        **Data Used**: Transaction history (check-outs represent demand)
+        **Key Metrics**:
+        - Avg Daily Demand: Mean quantity moved per day
+        - Demand Variability: Standard deviation ÷ mean (coefficient of variation)
+        - Peak Demand: Hour with highest transaction activity
+        - Seasonal Trend: Pattern detection (simplified)
+        """)
+    
     st.subheader("📊 Demand Pattern Analysis")
     
     # Get data based on access
@@ -360,6 +438,13 @@ def render_demand_insights(days, department_id, user_role):
     forecast_col1, forecast_col2 = st.columns(2)
     
     with forecast_col1:
+        with st.expander("🔮 **Item Forecasting - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Individual item transaction history
+            **Method**: 7-day moving average for trend identification
+            **Purpose**: Predict future demand for specific items
+            **Limitation**: Requires sufficient historical data
+            """)
         if not spare_parts.empty:
             selected_part = st.selectbox(
                 "Select Item for Forecasting",
@@ -379,6 +464,12 @@ def render_demand_insights(days, department_id, user_role):
             st.info("No inventory items available")
     
     with forecast_col2:
+        with st.expander("📅 **Weekly Patterns - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: All transactions grouped by day of week
+            **Calculation**: Transaction counts for each weekday
+            **Purpose**: Identify weekly demand cycles and busy days
+            """)
         st.plotly_chart(create_demand_pattern_chart(transactions), use_container_width=True)
     
     # Additional demand insights
@@ -387,67 +478,36 @@ def render_demand_insights(days, department_id, user_role):
     insight_col1, insight_col2 = st.columns(2)
     
     with insight_col1:
+        with st.expander("📊 **Weekly Pattern Details - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Transaction timestamps
+            **Purpose**: Detailed view of intra-week demand variations
+            **Implementation**: Placeholder for advanced weekly analysis
+            """)
         st.plotly_chart(create_weekly_demand_pattern(transactions), use_container_width=True)
     
     with insight_col2:
+        with st.expander("🔗 **Demand Correlation - Methodology**", expanded=False):
+            st.write("""
+            **Data Used**: Multiple items' transaction patterns
+            **Purpose**: Identify items with correlated demand patterns
+            **Implementation**: Placeholder for correlation heatmap
+            **Use Case**: Group ordering for correlated items
+            """)
         st.plotly_chart(create_demand_correlation_heatmap(transactions), use_container_width=True)
-
-def render_cost_analytics(days, department_id, user_role):
-    """Cost and value analytics"""
-    st.subheader("💰 Cost and Value Analytics")
-    
-    # Get data based on access
-    if user_role == 'User':
-        spare_parts = st.session_state.data_manager.get_parts_by_department(department_id)
-        transactions = st.session_state.data_manager.get_transaction_history_by_department(department_id, days)
-    else:
-        if department_id:
-            spare_parts = st.session_state.data_manager.get_parts_by_department(department_id)
-            transactions = st.session_state.data_manager.get_transaction_history_by_department(department_id, days)
-        else:
-            spare_parts = st.session_state.data_manager.get_all_parts()
-            transactions = st.session_state.data_manager.get_transaction_history(days=days)
-    
-    # Ensure data consistency
-    spare_parts = ensure_data_consistency(spare_parts)
-    transactions = ensure_data_consistency(transactions)
-    
-    # Cost metrics
-    #col1, col2, col3 = st.columns(3)
-    
-    #with col1:
-    #    carrying_cost = calculate_carrying_cost(spare_parts)
-    #    st.metric("Carrying Cost (Annual)", f"${carrying_cost:,.0f}")
-    
-    #with col2:
-    #    stockout_cost = estimate_stockout_cost(transactions, spare_parts)
-    #    st.metric("Estimated Stockout Cost", f"${stockout_cost:,.0f}")
-    
-    #with col3:
-    #    eoq_savings = calculate_eoq_savings(spare_parts)
-    #    st.metric("EOQ Potential Savings", f"${eoq_savings:,.0f}")
-    
-    # Cost analysis charts
-    #cost_col1, cost_col2 = st.columns(2)
-    
-    #with cost_col1:
-    #    st.plotly_chart(create_cost_analysis_chart(spare_parts), use_container_width=True)
-    #
-    #with cost_col2:
-    #    st.plotly_chart(create_value_distribution_chart(spare_parts), use_container_width=True)
-    
-    # Cost optimization recommendations
-    #st.subheader("💡 Cost Optimization Opportunities")
-    
-    #recommendations = generate_cost_recommendations(spare_parts, transactions)
-    #for i, rec in enumerate(recommendations):
-    #    with st.expander(f"Opportunity {i+1}: {rec['title']}"):
-    #        st.write(f"**Potential Savings:** ${rec['savings']:,.0f}")
-    #        st.write(rec['description'])
-    #        st.write(f"**Implementation:** {rec['implementation']}")
 
 def render_detailed_reports(days, department_id, user_role):
     """Detailed analytical reports"""
+    
+    with st.expander("📋 **Report Generation - Methodology**", expanded=False):
+        st.write("""
+        **Data Sources**: Combined inventory and transaction data
+        **Report Types**:
+        - Performance: Overall inventory health and activity metrics
+        - Stock Optimization: Detailed stock level analysis and recommendations
+        **Output**: Interactive dataframes with actionable insights
+        """)
+    
     st.subheader("📋 Detailed Analytical Reports")
     
     report_type = st.selectbox(
@@ -462,12 +522,6 @@ def render_detailed_reports(days, department_id, user_role):
         generate_inventory_performance_report(days, department_id, user_role)
     elif report_type == "Stock Optimization Report":
         generate_stock_optimization_report(days, department_id, user_role)
-    #elif report_type == "Demand Analysis Report":
-    #    generate_demand_analysis_report(days, department_id, user_role)
-    #elif report_type == "Cost Analysis Report":
-    #    generate_cost_analysis_report(days, department_id, user_role)
-    #elif report_type == "Department Performance Report":
-    #    generate_department_performance_report(days, department_id, user_role)
 
 # =============================================================================
 # CHART CREATION FUNCTIONS
@@ -512,19 +566,19 @@ def create_inventory_health_chart(spare_parts):
     
     spare_parts = spare_parts.copy()
     
-    # Ensure numeric columns
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
+    # Ensure decimal columns
+    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0.0)
+    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0.0)
     
-    # Create health status using pandas operations instead of np.select
+    # Update health status logic for decimal quantities
     health_status = []
     for _, row in spare_parts.iterrows():
-        quantity = row['quantity']
-        min_order_level = row['min_order_level']
+        quantity = float(row['quantity'])
+        min_order_level = float(row['min_order_level'])
         
         if quantity == 0:
             health_status.append('Out of Stock')
-        elif quantity == 1:
+        elif quantity <= 1.0:  # Changed to handle decimal "last piece"
             health_status.append('Last Piece')
         elif quantity <= min_order_level:
             health_status.append('Low Stock')
@@ -644,19 +698,19 @@ def create_abc_analysis_chart(spare_parts):
     spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
     
     # Simple ABC analysis based on quantity and criticality
-    spare_parts['value_score'] = spare_parts['quantity'] * spare_parts['min_order_level']
-    spare_parts = spare_parts.sort_values('value_score', ascending=False)
-    spare_parts['cumulative_percentage'] = spare_parts['value_score'].cumsum() / spare_parts['value_score'].sum() * 100
+    spare_parts['criticality_score'] = spare_parts['quantity'] * spare_parts['min_order_level']
+    spare_parts = spare_parts.sort_values('criticality_score', ascending=False)
+    spare_parts['cumulative_percentage'] = spare_parts['criticality_score'].cumsum() / spare_parts['criticality_score'].sum() * 100
     
     # Use explicit logic instead of np.select
     abc_class = []
     for cum_pct in spare_parts['cumulative_percentage']:
         if cum_pct <= 80:
-            abc_class.append('A - High Value')
+            abc_class.append('A - High Priority')
         elif cum_pct <= 95:
-            abc_class.append('B - Medium Value')
+            abc_class.append('B - Medium Priority')
         else:
-            abc_class.append('C - Low Value')
+            abc_class.append('C - Low Priority')
     
     spare_parts['abc_class'] = abc_class
     
@@ -685,10 +739,10 @@ def create_detailed_abc_chart(spare_parts):
     spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
     spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
     
-    # Calculate value (simplified - in real scenario use actual costs)
-    spare_parts['estimated_value'] = spare_parts['quantity'] * spare_parts['min_order_level'] * 10
-    spare_parts = spare_parts.sort_values('estimated_value', ascending=False)
-    spare_parts['cumulative_percentage'] = spare_parts['estimated_value'].cumsum() / spare_parts['estimated_value'].sum() * 100
+    # Calculate criticality score based on quantity and min_order_level
+    spare_parts['criticality_score'] = spare_parts['quantity'] * spare_parts['min_order_level']
+    spare_parts = spare_parts.sort_values('criticality_score', ascending=False)
+    spare_parts['cumulative_percentage'] = spare_parts['criticality_score'].cumsum() / spare_parts['criticality_score'].sum() * 100
     
     # Create Pareto chart
     fig = go.Figure()
@@ -696,11 +750,11 @@ def create_detailed_abc_chart(spare_parts):
     # Get top 20 items or all if less than 20
     top_items = spare_parts.head(20)
     
-    # Bar chart for individual values
+    # Bar chart for individual criticality scores
     fig.add_trace(go.Bar(
         x=top_items['name'],
-        y=top_items['estimated_value'],
-        name='Item Value',
+        y=top_items['criticality_score'],
+        name='Criticality Score',
         marker_color='lightblue'
     ))
     
@@ -717,7 +771,7 @@ def create_detailed_abc_chart(spare_parts):
     fig.update_layout(
         title='📈 Pareto Analysis - Top 20 Items',
         xaxis=dict(title='Items', tickangle=45),
-        yaxis=dict(title='Estimated Value ($)', side='left'),
+        yaxis=dict(title='Criticality Score', side='left'),
         yaxis2=dict(title='Cumulative Percentage', overlaying='y', side='right', range=[0, 100]),
         height=500,
         showlegend=True
@@ -732,9 +786,9 @@ def create_stock_level_analysis_chart(spare_parts):
     
     spare_parts = spare_parts.copy()
     
-    # Ensure numeric columns
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
+    # Ensure decimal columns
+    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0.0)
+    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0.0)
     
     # Handle department column
     if 'child_department' not in spare_parts.columns:
@@ -751,6 +805,7 @@ def create_stock_level_analysis_chart(spare_parts):
         else:
             spare_parts['child_department'] = 'General'
     
+    # Update hover data to show decimal values
     fig = px.scatter(
         spare_parts,
         x='quantity',
@@ -764,7 +819,7 @@ def create_stock_level_analysis_chart(spare_parts):
             'min_order_quantity': 'Order Quantity',
             'child_department': 'Department'
         },
-        hover_data=['name', 'part_number']
+        hover_data=['name', 'part_number', 'quantity', 'min_order_level']
     )
     
     # Add reference lines
@@ -842,112 +897,21 @@ def create_demand_pattern_chart(transactions):
     fig.update_layout(height=400)
     return fig
 
-def create_cost_analysis_chart(spare_parts):
-    """Create cost analysis and distribution chart"""
-    if spare_parts.empty:
-        return create_empty_chart("No data for cost analysis")
-    
-    spare_parts = spare_parts.copy()
-    
-    # Ensure numeric columns
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
-    
-    # Simplified cost calculation (replace with actual cost data)
-    spare_parts['estimated_cost'] = spare_parts['quantity'] * spare_parts['min_order_level'] * 5
-    
-    # Handle department column for treemap
-    if 'child_department' not in spare_parts.columns:
-        if 'department_id' in spare_parts.columns:
-            dept_mapping = {}
-            for dept_id in spare_parts['department_id'].unique():
-                dept_info = st.session_state.data_manager.get_department_info(dept_id)
-                if dept_info is not None and not dept_info.empty:
-                    dept_mapping[dept_id] = dept_info.get('child_department', f'Dept_{dept_id}')
-                else:
-                    dept_mapping[dept_id] = f'Dept_{dept_id}'
-            spare_parts['child_department'] = spare_parts['department_id'].map(dept_mapping)
-        else:
-            spare_parts['child_department'] = 'General'
-    
-    # Check if we have valid department data for treemap
-    if not spare_parts['child_department'].isna().all():
-        fig = px.treemap(
-            spare_parts,
-            path=['child_department', 'name'],
-            values='estimated_cost',
-            title='💰 Inventory Value Distribution by Department',
-            color='estimated_cost',
-            color_continuous_scale='Viridis'
-        )
-    else:
-        fig = px.treemap(
-            spare_parts,
-            path=['name'],
-            values='estimated_cost',
-            title='💰 Inventory Value Distribution',
-            color='estimated_cost',
-            color_continuous_scale='Viridis'
-        )
-    
-    fig.update_layout(height=500)
-    return fig
+def create_weekly_demand_pattern(transactions):
+    """Create weekly demand pattern chart"""
+    return create_empty_chart("Weekly demand pattern chart placeholder")
 
-def create_value_distribution_chart(spare_parts):
-    """Create value distribution analysis chart"""
-    if spare_parts.empty:
-        return create_empty_chart("No data for value distribution analysis")
-    
-    spare_parts = spare_parts.copy()
-    
-    # Ensure numeric columns
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
-    
-    spare_parts['estimated_value'] = spare_parts['quantity'] * spare_parts['min_order_level'] * 10
-    
-    # Handle department column
-    if 'child_department' not in spare_parts.columns:
-        if 'department_id' in spare_parts.columns:
-            dept_mapping = {}
-            for dept_id in spare_parts['department_id'].unique():
-                dept_info = st.session_state.data_manager.get_department_info(dept_id)
-                if dept_info is not None and not dept_info.empty:
-                    dept_mapping[dept_id] = dept_info.get('child_department', f'Dept_{dept_id}')
-                else:
-                    dept_mapping[dept_id] = f'Dept_{dept_id}'
-            spare_parts['child_department'] = spare_parts['department_id'].map(dept_mapping)
-        else:
-            spare_parts['child_department'] = 'General'
-    
-    # Fill any NaN values
-    spare_parts['child_department'] = spare_parts['child_department'].fillna('Unknown')
-    
-    fig = px.box(
-        spare_parts,
-        x='child_department',
-        y='estimated_value',
-        title="📦 Value Distribution by Department",
-        points='all'
-    )
-    
-    fig.update_layout(height=500, xaxis_tickangle=-45)
-    return fig
+def create_demand_correlation_heatmap(transactions):
+    """Create demand correlation heatmap"""
+    return create_empty_chart("Demand correlation heatmap placeholder")
+
+def create_reorder_analysis_chart(spare_parts, transactions):
+    """Create reorder analysis chart"""
+    return create_empty_chart("Reorder analysis chart placeholder")
 
 # =============================================================================
 # ANALYTICAL CALCULATION FUNCTIONS
 # =============================================================================
-
-def calculate_inventory_value(spare_parts):
-    """Calculate total inventory value (simplified)"""
-    if spare_parts.empty:
-        return 0
-    
-    spare_parts = spare_parts.copy()
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
-    spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
-    
-    return (spare_parts['quantity'] * spare_parts['min_order_level'] * 10).sum()
 
 def calculate_stock_turnover_rate(transactions, spare_parts):
     """Calculate inventory turnover rate"""
@@ -958,13 +922,14 @@ def calculate_stock_turnover_rate(transactions, spare_parts):
     transactions = transactions.copy()
     spare_parts = spare_parts.copy()
     
-    transactions['quantity'] = pd.to_numeric(transactions['quantity'], errors='coerce').fillna(0)
-    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0)
+    # Ensure decimal data types
+    transactions['quantity'] = pd.to_numeric(transactions['quantity'], errors='coerce').fillna(0.0)
+    spare_parts['quantity'] = pd.to_numeric(spare_parts['quantity'], errors='coerce').fillna(0.0)
     
     total_usage = abs(transactions[transactions['transaction_type'] == 'check_out']['quantity'].sum())
     avg_inventory = spare_parts['quantity'].mean()
     
-    return total_usage / avg_inventory if avg_inventory != 0 else 0
+    return float(total_usage / avg_inventory) if avg_inventory != 0 else 0.0
 
 def calculate_service_level(transactions):
     """Calculate service level percentage"""
@@ -986,9 +951,9 @@ def calculate_abc_summary(spare_parts):
     spare_parts['min_order_level'] = pd.to_numeric(spare_parts['min_order_level'], errors='coerce').fillna(0)
     
     # Simplified ABC calculation
-    spare_parts['value_score'] = spare_parts['quantity'] * spare_parts['min_order_level']
-    spare_parts = spare_parts.sort_values('value_score', ascending=False)
-    spare_parts['cumulative_percentage'] = spare_parts['value_score'].cumsum() / spare_parts['value_score'].sum() * 100
+    spare_parts['criticality_score'] = spare_parts['quantity'] * spare_parts['min_order_level']
+    spare_parts = spare_parts.sort_values('criticality_score', ascending=False)
+    spare_parts['cumulative_percentage'] = spare_parts['criticality_score'].cumsum() / spare_parts['criticality_score'].sum() * 100
     
     # Use explicit logic for ABC classification
     abc_class = []
@@ -1004,12 +969,12 @@ def calculate_abc_summary(spare_parts):
     
     abc_summary = spare_parts.groupby('abc_class').agg({
         'name': 'count',
-        'value_score': 'sum',
+        'criticality_score': 'sum',
         'quantity': 'sum'
-    }).rename(columns={'name': 'item_count', 'value_score': 'total_value'})
+    }).rename(columns={'name': 'item_count', 'criticality_score': 'total_criticality'})
     
     abc_summary['percentage_items'] = (abc_summary['item_count'] / len(spare_parts)) * 100
-    abc_summary['percentage_value'] = (abc_summary['total_value'] / spare_parts['value_score'].sum()) * 100
+    abc_summary['percentage_criticality'] = (abc_summary['total_criticality'] / spare_parts['criticality_score'].sum()) * 100
     
     return abc_summary.round(2)
 
@@ -1056,36 +1021,6 @@ def generate_stock_recommendations(spare_parts):
             'description': 'Items with stock levels significantly above requirements.',
             'items': excess_stock.assign(recommended_action='Review Stock Levels')
         })
-    
-    return recommendations
-
-def generate_cost_recommendations(spare_parts, transactions):
-    """Generate cost optimization recommendations"""
-    recommendations = []
-    
-    # EOQ recommendation
-    recommendations.append({
-        'title': 'Implement Economic Order Quantity',
-        'savings': 15000,
-        'description': 'Optimize order quantities to balance ordering and holding costs.',
-        'implementation': 'Medium term (1-2 months)'
-    })
-    
-    # ABC analysis implementation
-    recommendations.append({
-        'title': 'ABC Analysis Based Management',
-        'savings': 8000,
-        'description': 'Focus management efforts on high-value A items for maximum impact.',
-        'implementation': 'Short term (2-4 weeks)'
-    })
-    
-    # Safety stock optimization
-    recommendations.append({
-        'title': 'Safety Stock Optimization',
-        'savings': 5000,
-        'description': 'Adjust safety stock levels based on demand variability and lead times.',
-        'implementation': 'Medium term (1-3 months)'
-    })
     
     return recommendations
 
@@ -1245,21 +1180,6 @@ def generate_stock_optimization_report(days, department_id, user_role):
     with rec3:
         st.info("**Excess Stock Reduction**\n\nIdentify opportunities to reduce excess stock for 15 overstocked items.")
 
-def generate_demand_analysis_report(days, department_id, user_role):
-    """Generate demand analysis report"""
-    st.subheader("Demand Analysis Report - Placeholder")
-    st.info("Detailed demand analysis report will be implemented here.")
-
-def generate_cost_analysis_report(days, department_id, user_role):
-    """Generate cost analysis report"""
-    st.subheader("Cost Analysis Report - Placeholder")
-    st.info("Detailed cost analysis report will be implemented here.")
-
-def generate_department_performance_report(days, department_id, user_role):
-    """Generate department performance report"""
-    st.subheader("Department Performance Report - Placeholder")
-    st.info("Detailed department performance report will be implemented here.")
-
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -1284,11 +1204,11 @@ def ensure_data_consistency(df, expected_columns=None):
     
     df = df.copy()
     
-    # Ensure numeric columns are properly typed
+    # Update numeric columns to handle decimals
     numeric_columns = ['quantity', 'min_order_level', 'min_order_quantity', 'line_no']
     for col in numeric_columns:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)  # Changed to 0.0
     
     # Handle department information
     if 'child_department' not in df.columns and 'department_id' in df.columns:
@@ -1310,20 +1230,16 @@ def ensure_data_consistency(df, expected_columns=None):
     
     return df
 
-def calculate_value_change(transactions):
-    """Calculate inventory value change (simplified)"""
-    return 2500  # Placeholder
-
 def calculate_turnover_trend(transactions):
     """Calculate turnover trend (simplified)"""
     return 0.3  # Placeholder
 
-def calculate_excess_stock_value(spare_parts):
-    """Calculate excess stock value (simplified)"""
+def calculate_excess_stock_count(spare_parts):
+    """Calculate excess stock items count"""
     if spare_parts.empty:
         return 0
     excess = spare_parts[spare_parts['quantity'] > spare_parts['min_order_level'] * 2]
-    return (excess['quantity'] * 50).sum()  # Placeholder calculation
+    return len(excess)
 
 def calculate_stockout_risk(spare_parts):
     """Calculate stockout risk items count"""
@@ -1338,25 +1254,23 @@ def calculate_optimal_stock_level(spare_parts):
     optimal = spare_parts[spare_parts['quantity'] > spare_parts['min_order_level']]
     return (len(optimal) / len(spare_parts)) * 100
 
-def create_reorder_analysis_chart(spare_parts, transactions):
-    """Create reorder analysis chart"""
-    return create_empty_chart("Reorder analysis chart placeholder")
-
 def calculate_average_daily_demand(transactions):
-    """Calculate average daily demand"""
+    """Calculate average daily demand with decimal quantities"""
     if transactions.empty:
-        return 0
+        return 0.0
+    
     transactions['date'] = pd.to_datetime(transactions['timestamp']).dt.date
     daily_demand = transactions.groupby('date')['quantity'].sum()
-    return daily_demand.mean()
+    return float(daily_demand.mean())
 
 def calculate_demand_variability(transactions):
-    """Calculate demand variability coefficient"""
+    """Calculate demand variability coefficient with decimal quantities"""
     if transactions.empty:
-        return 0
+        return 0.0
+    
     transactions['date'] = pd.to_datetime(transactions['timestamp']).dt.date
     daily_demand = transactions.groupby('date')['quantity'].sum()
-    return daily_demand.std() / daily_demand.mean() if daily_demand.mean() != 0 else 0
+    return float(daily_demand.std() / daily_demand.mean()) if daily_demand.mean() != 0 else 0.0
 
 def identify_peak_demand(transactions):
     """Identify peak demand period"""
@@ -1369,28 +1283,6 @@ def identify_peak_demand(transactions):
 def detect_seasonal_trend(transactions):
     """Detect seasonal trend (simplified)"""
     return "Stable"
-
-def create_weekly_demand_pattern(transactions):
-    """Create weekly demand pattern chart"""
-    return create_empty_chart("Weekly demand pattern chart placeholder")
-
-def create_demand_correlation_heatmap(transactions):
-    """Create demand correlation heatmap"""
-    return create_empty_chart("Demand correlation heatmap placeholder")
-
-def calculate_carrying_cost(spare_parts):
-    """Calculate carrying cost (simplified)"""
-    if spare_parts.empty:
-        return 0
-    return (calculate_inventory_value(spare_parts) * 0.25)  # 25% carrying cost
-
-def estimate_stockout_cost(transactions, spare_parts):
-    """Estimate stockout cost (simplified)"""
-    return 5000  # Placeholder
-
-def calculate_eoq_savings(spare_parts):
-    """Calculate EOQ potential savings (simplified)"""
-    return 12000  # Placeholder
 
 if __name__ == "__main__":
     render_analytics_page()

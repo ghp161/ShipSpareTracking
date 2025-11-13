@@ -301,6 +301,9 @@ class DataManager:
     def add_spare_part(self, part_data):
         with self.get_cursor() as cursor:
             try:
+                # Ensure quantity is converted to float
+                part_data['quantity'] = float(part_data.get('quantity', 0))
+
                 cursor.execute(
                     '''
                     INSERT INTO spare_parts (part_number, name, description, quantity,
@@ -308,7 +311,7 @@ class DataManager:
                     mustered, department_id, compartment_no,  box_no, remark, 
                     min_order_level, min_order_quantity, barcode, last_updated, status,
                     last_maintenance_date, next_maintenance_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                     (part_data['part_number'], part_data['name'],
                     part_data['description'], part_data['quantity'],
@@ -466,12 +469,13 @@ class DataManager:
             try:
                 # First verify the part exists and has enough stock
                 # print(f"recording transaction: {part_id}")  # hari
+                quantity = float(quantity)
                 part_df = self.get_part_by_id(part_id)
                 if part_df is None or part_df.empty:
                     raise ValueError(f"Part with ID {part_id} not found")
 
                 part = part_df.iloc[0]
-                current_quantity = int(part['quantity'])
+                current_quantity = float(part['quantity'])
                 selected_part = int(part_id)
 
                 if transaction_type == 'check_out' and current_quantity < quantity:

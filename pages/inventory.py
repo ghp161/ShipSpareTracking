@@ -265,7 +265,7 @@ def render_inventory_page():
                     name = st.text_input("Part Name*", max_chars=100)
                     compartment_no = st.text_input("Compartment Name*", max_chars=20)
                     box_no = st.text_input("Box No*", max_chars=20)                
-                    quantity = st.number_input("Initial Quantity*", min_value=0)
+                    quantity = st.text_input("Initial Quantity*", value="0.0")
                     line_no = st.number_input("Line No*", min_value=1)
                     page_no = st.text_input("Page No", max_chars=20)
                     #yard_no = st.number_input("Yard No*", min_value=1)
@@ -290,6 +290,8 @@ def render_inventory_page():
 
                 if st.form_submit_button("Add Part"):
                     if part_number and name and ilms_code and description and remark and compartment_no and box_no and barcode:
+                        # Convert quantity to float
+                        quantity_float = float(quantity)
                         if last_maintenance_date > datetime.now().date():
                             st.error(
                                 "Last Maintenance Date should not be greater than the current date."
@@ -305,7 +307,7 @@ def render_inventory_page():
                                     'part_number': part_number,
                                     'name': name,
                                     'description': description,
-                                    'quantity': quantity,
+                                    'quantity': quantity_float,
                                     'line_no': line_no,
                                     'page_no': page_no,
                                     'order_no': order_no,
@@ -385,7 +387,13 @@ def show_edit_form(part_data):
         col1, col2 = st.columns(2)
         
         with col1:
-            new_quantity = st.number_input("Quantity", value=int(part_data['quantity']), min_value=0)
+            new_quantity = st.number_input(
+                "Quantity", 
+                value=float(part_data['quantity']), 
+                min_value=0.0, 
+                step=0.1,
+                format="%.3f"
+            )
             new_min_level = st.number_input("Minimum Order Level", value=int(part_data['min_order_level']), min_value=0)
             new_min_quantity = st.number_input("Minimum Order Quantity", value=int(part_data['min_order_quantity']), min_value=1)
             new_status = st.selectbox(
@@ -734,11 +742,11 @@ def bulk_import_section():
                 # Data cleaning and type conversion
                 df_clean = df.copy()
                 
-                # Handle numeric columns - fill NaN with 0 and convert to int
-                numeric_cols = ['quantity', 'line_no']
+                # Update data cleaning for decimal quantities
+                numeric_cols = ['quantity', 'min_order_level', 'min_order_quantity']
                 for col in numeric_cols:
                     if col in df_clean.columns:
-                        df_clean[col] = df_clean[col].fillna(0).astype(int)
+                        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
                 
                 # Handle text columns - fill NaN with empty string
                 text_cols = [

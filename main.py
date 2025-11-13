@@ -85,7 +85,7 @@ def show_application():
         maintenance_due = get_maintenance_due()
         if not maintenance_due.empty:
             for _, item in maintenance_due.head(3).iterrows():
-                days_until = (item['next_maintenance_date'] - datetime.now().date()).days
+                days_until = (item['next_maintenance_date'].date() - datetime.now().date()).days
                 st.write(f"• {item['name']} - {days_until} days")
         else:
             st.write("• No maintenance scheduled")
@@ -125,10 +125,14 @@ def show_application():
         if st.button("View Last Piece Level Stock Alerts"):
             lpl_stock = st.session_state.data_manager.get_last_piece_stock_items()
             if not lpl_stock.empty:
-                st.dataframe(lpl_stock[[
+                # Format decimal quantities for display
+                display_df = lpl_stock[[
                     'name', 'part_number', 'quantity', 'min_order_level'
-                ]],
-                             hide_index=True)
+                ]].copy()
+                display_df['quantity'] = display_df['quantity'].apply(lambda x: f"{float(x):.3f}")
+                display_df['min_order_level'] = display_df['min_order_level'].apply(lambda x: f"{float(x):.3f}")
+                
+                st.dataframe(display_df, hide_index=True)
 
                 # Download low stock report
                 csv = lpl_stock.to_csv(index=False)
@@ -190,11 +194,26 @@ def show_application():
             st.metric("Check-Ins", check_ins)
         with summary_col3:
             total_movement = abs(filtered_transactions['quantity'].sum())
-            st.metric("Total Movement", total_movement)
+            total_movement_rounded = round(total_movement, 2)  # Round to 2 decimal places
+            st.metric("Total Movement", total_movement_rounded)
     else:
         st.info("No recent transactions found")
 
 # Helper functions
+def format_quantity(value, decimal_places=2):
+    """Format quantity values to avoid floating-point precision issues"""
+    if value is None or pd.isna(value):
+        return 0.0
+    
+    # Round to specified decimal places
+    rounded_value = round(float(value), decimal_places)
+    
+    # If the rounded value is effectively an integer, return as int
+    if rounded_value.is_integer():
+        return int(rounded_value)
+    
+    return rounded_value
+
 def calculate_inventory_value(spare_parts):
     """Calculate total inventory value (simplified)"""
     if spare_parts.empty:
@@ -223,11 +242,17 @@ def get_fast_moving_items():
         if transactions.empty:
             return pd.DataFrame()
         
+        # Ensure decimal quantities
+        transactions['quantity'] = pd.to_numeric(transactions['quantity'], errors='coerce').fillna(0.0)
+
         # Group by item name and count transactions
         fast_moving = transactions.groupby('name').agg({
             'quantity': 'sum',
             'timestamp': 'count'
         }).rename(columns={'timestamp': 'transaction_count'})
+        
+        # Format quantity to 3 decimal places
+        fast_moving['quantity'] = fast_moving['quantity'].round(3)
         
         # Sort by transaction count
         fast_moving = fast_moving.sort_values('transaction_count', ascending=False)
@@ -322,12 +347,12 @@ def get_critical_events():
         # Add last piece alerts
         if not last_piece.empty:
             for _, item in last_piece.head(2).iterrows():  # Limit to 2 items
-                critical_events.append(f"Last piece: {item['name']} (Only {item['quantity']} left)")
+                critical_events.append(f"Last piece: {item['name']} (Only {float(item['quantity'])} left)")
         
         # Add low stock alerts
         if not low_stock.empty:
             for _, item in low_stock.head(2).iterrows():  # Limit to 2 items
-                critical_events.append(f"Low stock: {item['name']} ({item['quantity']} left, min: {item['min_order_level']})")
+                critical_events.append(f"Low stock: {item['name']} ({float(item['quantity']):.3f} left, min: {float(item['min_order_level']):.3f})")
         
         # If no critical events, add a message
         if not critical_events:
