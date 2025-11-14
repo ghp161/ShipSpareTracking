@@ -195,7 +195,19 @@ class DataManager:
         results = []
         success_count = 0
         
+        # Pre-check all barcodes to avoid duplicates
+        cursor = self.conn.cursor()
+        existing_barcodes = set()
+        
+        # Get all existing barcodes from the database
+        cursor.execute("SELECT barcode FROM spare_parts WHERE barcode IS NOT NULL AND barcode != ''")
+        existing_barcodes = {row[0] for row in cursor.fetchall()}
+        
+        # Also track barcodes within this import to avoid duplicates in the same file
+        import_barcodes = set()
+        
         for index, row in df.iterrows():
+            row_number = index + 1  # For user-friendly reporting
             try:
                 # Validate required fields
                 part_number = str(row.get('part_number', '')).strip()
@@ -204,55 +216,40 @@ class DataManager:
                 box_no = str(row.get('box_no', '')).strip()
                 ilms_code = str(row.get('ilms_code', '')).strip()
                 compartment_no = str(row.get('compartment_no', '')).strip()
+                barcode = self._safe_string(row.get('barcode', ''))
                 
-                # Check for required fields
-                if not part_number:
+                # Check for required fields with specific error messages
+                validation_errors = []
+                if not part_number or part_number.lower() == 'nan':
+                    validation_errors.append("Part Number is required")
+                if not name or name.lower() == 'nan':
+                    validation_errors.append("Part Name is required")
+                if not box_no or box_no.lower() == 'nan':
+                    validation_errors.append("Box No is required")
+                if not compartment_no or compartment_no.lower() == 'nan':
+                    validation_errors.append("Compartment Name is required")
+                
+                # Check for barcode duplicates
+                if barcode and barcode != '':
+                    if barcode in existing_barcodes:
+                        validation_errors.append(f"Barcode '{barcode}' already exists in database")
+                    elif barcode in import_barcodes:
+                        validation_errors.append(f"Barcode '{barcode}' is duplicated in this import file")
+                    else:
+                        import_barcodes.add(barcode)
+                
+                if validation_errors:
                     results.append({
-                        'part_number': 'MISSING',
-                        'name': name if name else 'MISSING',
+                        'row_number': row_number,
+                        'part_number': part_number if part_number and part_number.lower() != 'nan' else 'MISSING',
+                        'name': name if name and name.lower() != 'nan' else 'MISSING',
+                        'barcode': barcode,
                         'status': 'failed',
-                        'message': 'Part Number is required'
+                        'message': '; '.join(validation_errors)
                     })
                     continue
-                    
-                if not name:
-                    results.append({
-                        'part_number': part_number,
-                        'name': 'MISSING',
-                        'status': 'failed',
-                        'message': 'Part Name is required'
-                    })
-                    continue
-                    
-                # if not description:
-                #     results.append({
-                #         'part_number': part_number,
-                #         'name': name,
-                #         'status': 'failed',
-                #         'message': 'Description is required'
-                #     })
-                #     continue
-                    
-                if not box_no:
-                    results.append({
-                        'part_number': part_number,
-                        'name': name,
-                        'status': 'failed',
-                        'message': 'Box No is required'
-                    })
-                    continue
-                    
-                # if not ilms_code:
-                #     results.append({
-                #         'part_number': part_number,
-                #         'name': name,
-                #         'status': 'failed',
-                #         'message': 'ILMS Code is required'
-                #     })
-                #     continue
 
                 # Check if part number already exists in this department
-                cursor = self.conn.cursor()
                 cursor.execute(
                     "SELECT COUNT(*) FROM spare_parts WHERE part_number = ? AND department_id = ?",
                     (part_number, child_department_id)
@@ -261,83 +258,86 @@ class DataManager:
                 
                 if existing_count > 0:
                     results.append({
+                        'row_number': row_number,
                         'part_number': part_number,
                         'name': name,
+                        'barcode': barcode,
                         'status': 'failed',
                         'message': f'Part number already exists in this department'
                     })
                     continue
 
-                # Prepare part data with proper type conversion
+                # Prepare part data with proper type conversion and validation
                 part_data = {
                     'part_number': part_number,
                     'name': name,
-                    'description': description,
-                    'quantity': float(row.get('quantity', 0.0)),
-                    'line_no': int(float(row.get('line_no', 1))),
-                    'page_no': str(row.get('page_no', '')),
-                    'order_no': str(row.get('order_no', '')),
-                    'material_code': str(row.get('material_code', '')),
+                    'description': description if description.lower() != 'nan' else '',
+                    'quantity': self._safe_float(row.get('quantity', 0.0)),
+                    'line_no': self._safe_int(row.get('line_no', 1)),
+                    'page_no': self._safe_string(row.get('page_no', '')),
+                    'order_no': self._safe_string(row.get('order_no', '')),
+                    'material_code': self._safe_string(row.get('material_code', '')),
                     'ilms_code': ilms_code,
-                    'item_denomination': str(row.get('item_denomination', '')),
-                    'mustered': bool(row.get('mustered', False)),
+                    'item_denomination': self._safe_string(row.get('item_denomination', 'Pieces')),
+                    'mustered': self._safe_bool(row.get('mustered', False)),
                     'department_id': child_department_id,
                     'compartment_no': compartment_no,
                     'box_no': box_no,
-                    'remark': str(row.get('remark', 'Imported via bulk upload')),
-                    'min_order_level': float(row.get('min_order_level', 0.0)),
-                    'min_order_quantity': float(row.get('min_order_quantity', 1.0)),
-                    'barcode': str(row.get('barcode', '')),
-                    'status': str(row.get('status', 'In Store')),
-                    'last_maintenance_date': row.get('last_maintenance_date'),
-                    'next_maintenance_date': row.get('next_maintenance_date')
+                    'remark': self._safe_string(row.get('remark', 'Imported via bulk upload')),
+                    'min_order_level': self._safe_float(row.get('min_order_level', 0.0)),
+                    'min_order_quantity': self._safe_float(row.get('min_order_quantity', 1.0)),
+                    'barcode': barcode,
+                    'status': self._safe_string(row.get('status', 'In Store')),
+                    'last_maintenance_date': self._safe_date(row.get('last_maintenance_date')),
+                    'next_maintenance_date': self._safe_date(row.get('next_maintenance_date'))
                 }
-
-                # Handle date fields
-                if part_data['last_maintenance_date']:
-                    try:
-                        part_data['last_maintenance_date'] = pd.to_datetime(part_data['last_maintenance_date']).strftime('%Y-%m-%d')
-                    except:
-                        part_data['last_maintenance_date'] = None
-                        
-                if part_data['next_maintenance_date']:
-                    try:
-                        part_data['next_maintenance_date'] = pd.to_datetime(part_data['next_maintenance_date']).strftime('%Y-%m-%d')
-                    except:
-                        part_data['next_maintenance_date'] = None
 
                 # Add the part
                 success = self.add_spare_part(part_data)
                 
                 if success:
                     success_count += 1
+                    # Add to existing barcodes to prevent duplicates in subsequent imports
+                    if barcode and barcode != '':
+                        existing_barcodes.add(barcode)
+                    
                     results.append({
+                        'row_number': row_number,
                         'part_number': part_data['part_number'],
                         'name': part_data['name'],
+                        'barcode': barcode,
                         'status': 'success',
                         'message': 'Successfully imported'
                     })
                 else:
                     results.append({
+                        'row_number': row_number,
                         'part_number': part_data['part_number'],
                         'name': part_data['name'],
+                        'barcode': barcode,
                         'status': 'failed',
-                        'message': 'Database insertion failed'
+                        'message': 'Database insertion failed - check console for detailed error'
                     })
                 
             except Exception as e:
                 error_msg = str(e)
                 # Make error message more user-friendly
-                if "UNIQUE constraint failed" in error_msg:
+                if "UNIQUE constraint failed: spare_parts.barcode" in error_msg:
+                    error_msg = "Barcode already exists in database"
+                elif "UNIQUE constraint failed" in error_msg:
                     error_msg = "Part number already exists in this department"
                 elif "NOT NULL constraint failed" in error_msg:
                     error_msg = "Missing required field"
+                elif "foreign key constraint failed" in error_msg:
+                    error_msg = "Invalid department reference"
                     
                 results.append({
+                    'row_number': row_number,
                     'part_number': str(row.get('part_number', 'Unknown')),
                     'name': str(row.get('name', 'Unknown')),
+                    'barcode': str(row.get('barcode', '')),
                     'status': 'failed',
-                    'message': f'{error_msg}'
+                    'message': f'Error: {error_msg}'
                 })
         
         # Determine overall success
@@ -345,40 +345,174 @@ class DataManager:
         overall_message = f"Processed {len(results)} records: {success_count} successful, {len(results) - success_count} failed"
         
         return results, overall_success, overall_message
+
+    # Add this new helper method
+    def _safe_string(self, value, default=''):
+        """Safely convert to string, handling NaN and None values"""
+        try:
+            if value is None:
+                return default
+            if isinstance(value, str):
+                cleaned = value.strip()
+                return '' if cleaned.lower() == 'nan' else cleaned
+            if pd.isna(value):  # Handle pandas NaN
+                return default
+            return str(value).strip()
+        except:
+            return default
+
+    # Add these helper methods to your DataManager class
+    def _safe_float(self, value, default=0.0):
+        """Safely convert to float"""
+        try:
+            return float(value) if value is not None else default
+        except (ValueError, TypeError):
+            return default
+
+    def _safe_int(self, value, default=1):
+        """Safely convert to int"""
+        try:
+            return int(float(value)) if value is not None else default
+        except (ValueError, TypeError):
+            return default
+
+    def _safe_bool(self, value, default=False):
+        """Safely convert to boolean"""
+        try:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            if isinstance(value, str):
+                return value.lower() in ['true', '1', 'yes', 'y']
+            return default
+        except:
+            return default
+
+    def _safe_date(self, value):
+        """Safely convert to date string"""
+        if not value:
+            return None
+        try:
+            if isinstance(value, str):
+                # Try to parse the date string
+                from datetime import datetime
+                parsed_date = datetime.strptime(value.strip(), '%Y-%m-%d')
+                return parsed_date.strftime('%Y-%m-%d')
+            return str(value).strip()
+        except:
+            return None
     
     def add_spare_part(self, part_data):
-        with self.get_cursor() as cursor:
-            try:
-                # Ensure quantity is converted to float
-                part_data['quantity'] = float(part_data.get('quantity', 0))
+        """Add a new spare part to the database with proper error handling"""
+        try:
+            cursor = self.conn.cursor()
+            
+            # Debug: Print incoming data
+            print(f"Adding part: {part_data.get('part_number')}")
+            
+            # Check if part number already exists in the same department
+            cursor.execute(
+                "SELECT COUNT(*) FROM spare_parts WHERE part_number = ? AND department_id = ?",
+                (part_data['part_number'], part_data['department_id'])
+            )
+            existing_count = cursor.fetchone()[0]
+            
+            if existing_count > 0:
+                print(f"Part {part_data['part_number']} already exists in department {part_data['department_id']}")
+                return False
 
+            # Check if barcode already exists (if barcode is provided)
+            barcode = part_data.get('barcode', '').strip()
+            if barcode and barcode.lower() != 'nan' and barcode != '':
                 cursor.execute(
-                    '''
-                    INSERT INTO spare_parts (part_number, name, description, quantity,
-                    line_no, page_no, order_no, material_code, ilms_code, item_denomination,
-                    mustered, department_id, compartment_no,  box_no, remark, 
-                    min_order_level, min_order_quantity, barcode, last_updated, status,
-                    last_maintenance_date, next_maintenance_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''',
-                    (part_data['part_number'], part_data['name'],
-                    part_data['description'], part_data['quantity'],
-                    part_data['line_no'], part_data['page_no'], part_data['order_no'],
-                    part_data['material_code'], part_data['ilms_code'],
-                    part_data['item_denomination'], part_data['mustered'],
-                    part_data['department_id'], part_data['compartment_no'],
-                    part_data['box_no'], part_data['remark'],
-                    part_data['min_order_level'], part_data['min_order_quantity'],
-                    part_data['barcode'], datetime.now(), 
-                    part_data['status'], part_data['last_maintenance_date'],
-                    part_data['next_maintenance_date']))
-                self.conn.commit()
+                    "SELECT COUNT(*) FROM spare_parts WHERE barcode = ?",
+                    (barcode,)
+                )
+                barcode_exists = cursor.fetchone()[0]
+                
+                if barcode_exists > 0:
+                    print(f"Barcode {barcode} already exists in the system")
+                    return False
+
+            # Prepare the SQL query with only existing columns (only last_updated, no created_at)
+            fields = [
+                'part_number', 'name', 'description', 'quantity', 'line_no', 'page_no',
+                'order_no', 'material_code', 'ilms_code', 'item_denomination', 'mustered',
+                'department_id', 'compartment_no', 'box_no', 'remark', 'min_order_level',
+                'min_order_quantity', 'barcode', 'status', 'last_maintenance_date',
+                'next_maintenance_date', 'last_updated'  # Only last_updated, no created_at
+            ]
+            
+            # Filter out fields that don't exist in part_data
+            available_fields = [f for f in fields if f in part_data and part_data[f] is not None]
+            
+            # Ensure last_updated is always included
+            current_time = datetime.now()
+            if 'last_updated' not in available_fields:
+                available_fields.append('last_updated')
+                part_data['last_updated'] = current_time
+            
+            # Create placeholders for the query
+            placeholders = ', '.join(['?' for _ in available_fields])
+            columns = ', '.join(available_fields)
+            
+            # Prepare values, handling different data types
+            values = []
+            for field in available_fields:
+                value = part_data[field]
+                
+                # Convert boolean to integer for SQLite
+                if field == 'mustered' and isinstance(value, bool):
+                    value = 1 if value else 0
+                # Convert float quantities
+                elif field in ['quantity', 'min_order_level', 'min_order_quantity']:
+                    value = float(value) if value is not None else 0.0
+                # Convert integer fields
+                elif field == 'line_no':
+                    value = int(float(value)) if value is not None else 1
+                # Handle date fields
+                elif field in ['last_maintenance_date', 'next_maintenance_date'] and value:
+                    try:
+                        # Ensure date is in proper format
+                        if isinstance(value, str):
+                            value = value.strip()
+                            if value == '':
+                                value = None
+                    except:
+                        value = None
+                # Handle 'nan' string values
+                elif isinstance(value, str) and value.lower() == 'nan':
+                    value = ''
+                # Ensure strings are properly formatted
+                elif isinstance(value, str):
+                    value = value.strip()
+                
+                values.append(value)
+            
+            query = f"INSERT INTO spare_parts ({columns}) VALUES ({placeholders})"
+            
+            print(f"Executing query: {query}")
+            print(f"Number of columns: {len(available_fields)}")
+            print(f"Number of values: {len(values)}")
+            print(f"With values: {values}")
+            
+            cursor.execute(query, values)
+            self.conn.commit()
+            
+            if cursor.rowcount > 0:
+                print(f"Successfully added part: {part_data['part_number']}")
                 return True
-            except sqlite3.IntegrityError:
+            else:
+                print(f"No rows affected when adding part: {part_data['part_number']}")
                 return False
-            except sqlite3.Error as e:
-                print(f"Error adding spare part: {e}")
-                return False
+                
+        except Exception as e:
+            print(f"Error adding part {part_data.get('part_number')}: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            self.conn.rollback()
+            return False
 
     def update_spare_part(self, part_id, part_data):
         with self.get_cursor() as cursor:
