@@ -190,113 +190,161 @@ class DataManager:
         query = "SELECT id, name FROM departments WHERE parent_id = ?"
         return pd.read_sql_query(query, self.conn, params=(parent_id,))
     
-    def bulk_import_spare_parts(self, df, department_id, parent_dept_id):
-        """Bulk import spare parts from DataFrame with department assignment"""
-        
+    def bulk_import_spare_parts(self, df, child_department_id, parent_department_id):
+        """Bulk import spare parts with detailed error reporting"""
         results = []
-        with self.get_cursor() as cursor:  # Use context manager
+        success_count = 0
+        
+        for index, row in df.iterrows():
             try:
-                records = df.to_dict('records')
-                cursor.execute("BEGIN TRANSACTION")            
+                # Validate required fields
+                part_number = str(row.get('part_number', '')).strip()
+                name = str(row.get('name', '')).strip()
+                description = str(row.get('description', '')).strip()
+                box_no = str(row.get('box_no', '')).strip()
+                ilms_code = str(row.get('ilms_code', '')).strip()
+                compartment_no = str(row.get('compartment_no', '')).strip()
                 
-                for idx, record in enumerate(records, start=1):
-                    result = {
-                        'row_number': idx,
-                        'part_number': record.get('part_number', ''),
-                        'name': record.get('name', ''),
-                        'status': 'pending',
-                        'message': ''
-                    }
+                # Check for required fields
+                if not part_number:
+                    results.append({
+                        'part_number': 'MISSING',
+                        'name': name if name else 'MISSING',
+                        'status': 'failed',
+                        'message': 'Part Number is required'
+                    })
+                    continue
                     
+                if not name:
+                    results.append({
+                        'part_number': part_number,
+                        'name': 'MISSING',
+                        'status': 'failed',
+                        'message': 'Part Name is required'
+                    })
+                    continue
+                    
+                # if not description:
+                #     results.append({
+                #         'part_number': part_number,
+                #         'name': name,
+                #         'status': 'failed',
+                #         'message': 'Description is required'
+                #     })
+                #     continue
+                    
+                if not box_no:
+                    results.append({
+                        'part_number': part_number,
+                        'name': name,
+                        'status': 'failed',
+                        'message': 'Box No is required'
+                    })
+                    continue
+                    
+                # if not ilms_code:
+                #     results.append({
+                #         'part_number': part_number,
+                #         'name': name,
+                #         'status': 'failed',
+                #         'message': 'ILMS Code is required'
+                #     })
+                #     continue
+
+                # Check if part number already exists in this department
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "SELECT COUNT(*) FROM spare_parts WHERE part_number = ? AND department_id = ?",
+                    (part_number, child_department_id)
+                )
+                existing_count = cursor.fetchone()[0]
+                
+                if existing_count > 0:
+                    results.append({
+                        'part_number': part_number,
+                        'name': name,
+                        'status': 'failed',
+                        'message': f'Part number already exists in this department'
+                    })
+                    continue
+
+                # Prepare part data with proper type conversion
+                part_data = {
+                    'part_number': part_number,
+                    'name': name,
+                    'description': description,
+                    'quantity': float(row.get('quantity', 0.0)),
+                    'line_no': int(float(row.get('line_no', 1))),
+                    'page_no': str(row.get('page_no', '')),
+                    'order_no': str(row.get('order_no', '')),
+                    'material_code': str(row.get('material_code', '')),
+                    'ilms_code': ilms_code,
+                    'item_denomination': str(row.get('item_denomination', '')),
+                    'mustered': bool(row.get('mustered', False)),
+                    'department_id': child_department_id,
+                    'compartment_no': compartment_no,
+                    'box_no': box_no,
+                    'remark': str(row.get('remark', 'Imported via bulk upload')),
+                    'min_order_level': float(row.get('min_order_level', 0.0)),
+                    'min_order_quantity': float(row.get('min_order_quantity', 1.0)),
+                    'barcode': str(row.get('barcode', '')),
+                    'status': str(row.get('status', 'In Store')),
+                    'last_maintenance_date': row.get('last_maintenance_date'),
+                    'next_maintenance_date': row.get('next_maintenance_date')
+                }
+
+                # Handle date fields
+                if part_data['last_maintenance_date']:
                     try:
-                        # Validate required fields
-                        if not record.get('part_number'):
-                            raise ValueError("Part number is required")
-                        if not record.get('name'):
-                            raise ValueError("Name is required")
-                        if not isinstance(record.get('quantity', 0), (int, float)):
-                            raise ValueError("Quantity must be a number")
-                        # Check barcode uniqueness if provided
-                        if 'barcode' in record and record['barcode']:
-                            cursor.execute("SELECT 1 FROM spare_parts WHERE barcode=?", (record['barcode'],))
-                            if cursor.fetchone():
-                                raise ValueError(f"Barcode {record['barcode']} already exists in database")
-                        if not record.get('barcode'):
-                            raise ValueError("Barcode is required")
-                        # Generate barcode if not provided
-                        #if 'barcode' not in record or pd.isna(record.get('barcode')) or not record.get('barcode'):
-                            # Get last serial number from database
-                        #    last_serial = get_last_serial_number(department_id)
-                        #    record['barcode'] = BarcodeHandler.generate_unique_barcode()
+                        part_data['last_maintenance_date'] = pd.to_datetime(part_data['last_maintenance_date']).strftime('%Y-%m-%d')
+                    except:
+                        part_data['last_maintenance_date'] = None
                         
-                        # Set default values
-                        record['department_id'] = department_id
-                        record['min_order_level'] = record.get('min_order_level', 0)
-                        record['min_order_quantity'] = record.get('min_order_quantity', 1)
-                        record['compartment_no'] = record.get('compartment_no', '')
-                        record['last_updated'] = datetime.now()
-                        
-                        # Ensure all required fields have values
-                        record['part_number'] = str(record['part_number'])
-                        record['name'] = str(record['name'])
-                        record['quantity'] = int(record['quantity'])
-                        record['line_no'] = int(record.get('line_no', 0))
-                        #record['yard_no'] = int(record.get('yard_no', 0))
-                        
-                        cursor.execute('''
-                            INSERT OR REPLACE INTO spare_parts (
-                                part_number, name, description, quantity,
-                                line_no, page_no, order_no,
-                                material_code, ilms_code, item_denomination,
-                                mustered, department_id, compartment_no,
-                                box_no, remark, min_order_level,
-                                min_order_quantity, barcode, last_updated, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            record['part_number'],
-                            record['name'],
-                            record.get('description', ''),
-                            record['quantity'],
-                            record['line_no'],
-                            str(record.get('page_no', '')),
-                            str(record.get('order_no', '')),
-                            str(record.get('material_code', '')),
-                            str(record.get('ilms_code', '')),
-                            str(record.get('item_denomination', '')),
-                            bool(record.get('mustered', False)),
-                            record['department_id'],
-                            str(record.get('compartment_name', '')),
-                            str(record.get('box_no', '')),
-                            str(record.get('remark', '')),
-                            int(record.get('min_order_level', 0)),
-                            int(record.get('min_order_quantity', 1)),
-                            record['barcode'],
-                            record['last_updated'],
-                            'In Store'
-                        ))
-                        result['status'] = 'success'
-                        result['message'] = 'Imported successfully'
-                    
-                    except Exception as e:
-                        self.conn.rollback()
-                        cursor.execute("BEGIN TRANSACTION")  # Restart transaction for next record
-                        result['status'] = 'failed'
-                        result['message'] = str(e)
-                        
-                    results.append(result)
+                if part_data['next_maintenance_date']:
+                    try:
+                        part_data['next_maintenance_date'] = pd.to_datetime(part_data['next_maintenance_date']).strftime('%Y-%m-%d')
+                    except:
+                        part_data['next_maintenance_date'] = None
+
+                # Add the part
+                success = self.add_spare_part(part_data)
                 
-                self.conn.commit()
-                return results, True, f"Successfully imported {len([r for r in results if r['status'] == 'success'])}/{len(records)} records"
+                if success:
+                    success_count += 1
+                    results.append({
+                        'part_number': part_data['part_number'],
+                        'name': part_data['name'],
+                        'status': 'success',
+                        'message': 'Successfully imported'
+                    })
+                else:
+                    results.append({
+                        'part_number': part_data['part_number'],
+                        'name': part_data['name'],
+                        'status': 'failed',
+                        'message': 'Database insertion failed'
+                    })
+                
             except Exception as e:
-                self.conn.rollback()
-                result = [{
-                    'row_number': 0,
-                    'part_number': '',
-                    'name': '',
+                error_msg = str(e)
+                # Make error message more user-friendly
+                if "UNIQUE constraint failed" in error_msg:
+                    error_msg = "Part number already exists in this department"
+                elif "NOT NULL constraint failed" in error_msg:
+                    error_msg = "Missing required field"
+                    
+                results.append({
+                    'part_number': str(row.get('part_number', 'Unknown')),
+                    'name': str(row.get('name', 'Unknown')),
                     'status': 'failed',
-                    'message': f"Global error: {str(e)}"
-                }]
-                return results, False, f"Error during import: {str(e)}"            
+                    'message': f'{error_msg}'
+                })
+        
+        # Determine overall success
+        overall_success = success_count > 0
+        overall_message = f"Processed {len(results)} records: {success_count} successful, {len(results) - success_count} failed"
+        
+        return results, overall_success, overall_message
     
     def add_spare_part(self, part_data):
         with self.get_cursor() as cursor:

@@ -644,24 +644,26 @@ def generate_custom_barcode(parent_dept_name, child_dept_name, last_serial_no):
     return f"{parent_code}-{child_code}-{serial_str}"
 
 def download_csv_template():
-    """Generate and provide a downloadable CSV template"""
+    """Generate and provide a downloadable CSV template with decimal quantities"""
     # Create sample DataFrame with required columns and example rows
     template_data = {
-        'part_number': ['ABC-123', 'XYZ-456', ''],
-        'name': ['Bearing 10mm', 'Hydraulic Seal', ''],
-        'quantity': [5, 10, ''],
-        'line_no': [1, 2, ''],
-        'description': [1, 1, ''],
-        'barcode': ['POP-P-001', 'POP-P-002', ''],
-        'page_no': ['A12', 'B34', ''],
-        'order_no': ['PO-2023-001', 'PO-2023-002', ''],
-        'material_code': ['MAT-001', 'MAT-002', ''],
-        'ilms_code': ['ILMS-001', 'ILMS-002', ''],
-        'item_denomination': ['Pieces', 'Pieces', ''],
-        'mustered': [True, False, ''],
-        'compartment_name': ['C-12', 'D-34', ''],
-        'box_no': ['B1', 'B2', ''],
-        'remark': ['Urgent', 'Normal', '']
+        'part_number': ['ABC-123', 'XYZ-456', 'DEF-789'],
+        'name': ['Bearing 10mm', 'Hydraulic Seal', 'Oil Filter'],
+        'quantity': [5.5, 10.0, 2.25],
+        'line_no': [1, 2, 3],
+        'description': ['High precision bearing', 'Hydraulic system seal', 'Engine oil filter'],
+        'barcode': ['POP-P-001', 'POP-P-002', 'POP-P-003'],
+        'page_no': ['A12', 'B34', 'C56'],
+        'order_no': ['PO-2023-001', 'PO-2023-002', 'PO-2023-003'],
+        'material_code': ['MAT-001', 'MAT-002', 'MAT-003'],
+        'ilms_code': ['ILMS-001', 'ILMS-002', 'ILMS-003'],
+        'item_denomination': ['Pieces', 'Pieces', 'Pieces'],
+        'mustered': [True, False, True],
+        'compartment_name': ['C-12', 'D-34', 'E-56'],
+        'box_no': ['B1', 'B2', 'B3'],
+        'remark': ['Urgent', 'Normal', 'Critical'],
+        'min_order_level': [2.0, 5.0, 1.5],
+        'min_order_quantity': [10.0, 20.0, 5.0]
     }
     
     df = pd.DataFrame(template_data)
@@ -675,13 +677,12 @@ def download_csv_template():
         data=csv,
         file_name="inventory_import_template.csv",
         mime="text/csv",
-        help="Download template with all required columns"
+        help="Download template with all required columns and decimal quantity examples",
+        key="download_template"
     )
 
 def bulk_import_section():
     """Bulk import from CSV with department selection"""
-    #st.subheader("Bulk Import from CSV")
-    # Add the download button at the top
     download_csv_template()
 
     # Step 1: Department Selection
@@ -700,19 +701,27 @@ def bulk_import_section():
             parent_depts['id'].tolist(),
             index=None,
             placeholder="Select Parent Department",
-            format_func=lambda x: parent_depts[parent_depts['id'] == x]['name'].iloc[0]
+            format_func=lambda x: parent_depts[parent_depts['id'] == x]['name'].iloc[0],
+            key="bulk_import_parent"
         )
     
     with cols[1]:
-        child_depts = st.session_state.data_manager.get_child_departments(selected_parent)
-        if not child_depts.empty:
-            selected_child = st.selectbox(
-                "Select Child Department*",
-                child_depts['id'].tolist(),
-                index=None,
-                placeholder="Select Child Department",
-                format_func=lambda x: child_depts[child_depts['id'] == x]['name'].iloc[0]
-            )
+        if selected_parent:
+            child_depts = st.session_state.data_manager.get_child_departments(selected_parent)
+            if not child_depts.empty:
+                selected_child = st.selectbox(
+                    "Select Child Department*",
+                    child_depts['id'].tolist(),
+                    index=None,
+                    placeholder="Select Child Department",
+                    format_func=lambda x: child_depts[child_depts['id'] == x]['name'].iloc[0],
+                    key="bulk_import_child"
+                )
+            else:
+                st.error("No child departments found for selected parent department")
+                selected_child = None
+        else:
+            selected_child = None
     
     # Step 2: File Upload
     if selected_parent and selected_child:
@@ -720,7 +729,8 @@ def bulk_import_section():
         uploaded_file = st.file_uploader(
             "Choose a CSV file",
             type=["csv"],
-            help="Upload a CSV file with spare parts data"
+            help="Upload a CSV file with spare parts data",
+            key="bulk_import_file"
         )
     
         if uploaded_file is not None and selected_child:
@@ -730,8 +740,7 @@ def bulk_import_section():
                 
                 # Validate required columns
                 required_columns = [
-                    'part_number', 'name', 'quantity', 'ilms_code', #'Remark', 'compartment_name',
-                    'description', 'box_no'
+                    'part_number', 'name', 'quantity',  'box_no'
                 ]
                 
                 missing_columns = [col for col in required_columns if col not in df.columns]
@@ -739,19 +748,19 @@ def bulk_import_section():
                     st.error(f"Missing required columns: {', '.join(missing_columns)}")
                     return
                 
-                # Data cleaning and type conversion
+                # Data cleaning and type conversion for decimal quantities
                 df_clean = df.copy()
                 
-                # Update data cleaning for decimal quantities
-                numeric_cols = ['quantity', 'min_order_level', 'min_order_quantity']
+                # Handle numeric columns - fill NaN with 0.0 and convert to float for decimal quantities
+                numeric_cols = ['quantity', 'min_order_level', 'min_order_quantity', 'line_no']
                 for col in numeric_cols:
                     if col in df_clean.columns:
                         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
                 
                 # Handle text columns - fill NaN with empty string
                 text_cols = [
-                    'page_no', 'order_no', 'material_code', 'compartment_name',  'description', 'name',
-                    'ilms_code', 'item_denomination', 'box_no', 'Remark'
+                    'page_no', 'order_no', 'material_code', 'compartment_name', 'description', 'name',
+                    'ilms_code', 'item_denomination', 'box_no', 'Remark', 'part_number', 'barcode'
                 ]
                 for col in text_cols:
                     if col in df_clean.columns:
@@ -759,7 +768,26 @@ def bulk_import_section():
                 
                 # Handle boolean column
                 if 'mustered' in df_clean.columns:
-                    df_clean['mustered'] = df_clean['mustered'].fillna(False).astype(bool)
+                    df_clean['mustered'] = df_clean['mustered'].fillna(False)
+                    # Convert to boolean, handling string representations
+                    df_clean['mustered'] = df_clean['mustered'].apply(lambda x: 
+                        str(x).lower() in ['true', '1', 'yes', 'y'] if isinstance(x, str) else bool(x))
+                
+                # Validate critical fields
+                critical_errors = []
+                for idx, row in df_clean.iterrows():
+                    if not row['part_number'] or str(row['part_number']).strip() == '':
+                        critical_errors.append(f"Row {idx+1}: Part Number is required")
+                    if not row['name'] or str(row['name']).strip() == '':
+                        critical_errors.append(f"Row {idx+1}: Name is required")
+                    if not row['box_no'] or str(row['box_no']).strip() == '':
+                        critical_errors.append(f"Row {idx+1}: Box No is required")
+                
+                if critical_errors:
+                    st.error("Critical validation errors found:")
+                    for error in critical_errors:
+                        st.error(error)
+                    return
                 
                 # Show preview with department info
                 st.subheader("Import Preview")
@@ -767,7 +795,15 @@ def bulk_import_section():
                 
                 preview_df = df_clean.head().copy()
                 preview_df['assigned_department'] = child_depts[child_depts['id'] == selected_child]['name'].iloc[0]
-                st.dataframe(preview_df, hide_index=True)
+                
+                # Format numeric columns for display
+                display_df = preview_df.copy()
+                numeric_display_cols = ['quantity', 'min_order_level', 'min_order_quantity', 'line_no']
+                for col in numeric_display_cols:
+                    if col in display_df.columns:
+                        display_df[col] = display_df[col].apply(lambda x: f"{float(x):.3f}" if pd.notna(x) else "0.000")
+                
+                st.dataframe(display_df, hide_index=True)
                 
                 # Map CSV columns to database columns
                 column_mapping = {
@@ -783,70 +819,163 @@ def bulk_import_section():
                     'item_denomination': 'item_denomination',
                     'mustered': 'mustered',
                     'box_no': 'box_no',
-                    'compartment_no' : 'compartment_name',
+                    'compartment_name': 'compartment_no',
                     'Remark': 'remark',
                     'barcode': 'barcode'
                 }
                 
-                df_import = df_clean.rename(columns=column_mapping)
+                # Only include columns that exist in the CSV
+                available_mapping = {csv_col: db_col for csv_col, db_col in column_mapping.items() if csv_col in df_clean.columns}
+                df_import = df_clean.rename(columns=available_mapping)
+                
+                # Add missing columns with default values
+                required_db_columns = ['compartment_no', 'remark']
+                for col in required_db_columns:
+                    if col not in df_import.columns:
+                        if col == 'compartment_no':
+                            df_import['compartment_no'] = ''  # Default empty compartment
+                        elif col == 'remark':
+                            df_import['remark'] = 'Imported via bulk upload'  # Default remark
                 
                 # Step 3: Import Confirmation
                 st.markdown("### Step 3: Confirm Import")
-                if st.button(f"Import {len(df_clean)} Records"):
+                if st.button(f"Import {len(df_clean)} Records", key="bulk_import_confirm"):
                     with st.spinner(f"Importing {len(df_clean)} records..."):
                         results, success, message = st.session_state.data_manager.bulk_import_spare_parts(
                             df_import, selected_child, selected_parent
                         )
-                        if success:
-                            st.toast(message, icon="✅")
-                            time.sleep(3)  # This will block the UI
-                            # Process results
-                            success_count = len([r for r in results if r['status'] == 'success'])
-                            failed_count = len([r for r in results if r['status'] == 'failed'])
-                            
-                            # Create results dataframe
-                            results_df = pd.DataFrame(results)
-                            
-                            # Show summary
-                            st.success(f"Successfully imported {success_count} records")
-                            if failed_count > 0:
-                                st.error(f"Failed to import {failed_count} records")
-                            
-                            # Display results table with tabs
-                            tab1, tab2 = st.tabs(["All Results", "Failed Only"])
-                            
-                            with tab1:
-                                st.dataframe(results_df, hide_index=True)
-                            
-                            with tab2:
-                                failed_df = results_df[results_df['status'] == 'failed']
-                                st.dataframe(failed_df, hide_index=True)
-                            
-                            # Download buttons
-                            st.markdown("### Download Import Results")
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
+                        
+                        # Display detailed results
+                        st.subheader("📊 Import Results")
+                        
+                        # Calculate statistics
+                        total_records = len(results)
+                        success_count = len([r for r in results if r['status'] == 'success'])
+                        failed_count = len([r for r in results if r['status'] == 'failed'])
+                        
+                        # Display summary metrics
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Records Processed", total_records)
+                        with col2:
+                            st.metric("Successfully Imported", success_count)
+                        with col3:
+                            st.metric("Failed", failed_count, delta=f"-{failed_count}", delta_color="inverse")
+                        
+                        if success_count > 0:
+                            st.success(f"✅ Successfully imported {success_count} records")
+                        if failed_count > 0:
+                            st.error(f"❌ Failed to import {failed_count} records")
+                        
+                        # Create detailed results dataframe
+                        results_df = pd.DataFrame(results)
+                        
+                        # Display results in tabs
+                        tab1, tab2, tab3 = st.tabs(["📋 All Results", "✅ Successful", "❌ Failed"])
+                        
+                        with tab1:
+                            st.write("### All Import Results")
+                            if not results_df.empty:
+                                # Format the display
+                                display_df = results_df.copy()
+                                # Add row numbers
+                                display_df['#'] = range(1, len(display_df) + 1)
+                                # Reorder columns to show row number first
+                                cols = ['#'] + [col for col in display_df.columns if col != '#']
+                                display_df = display_df[cols]
+                                
+                                st.dataframe(display_df, hide_index=True, use_container_width=True)
+                            else:
+                                st.info("No results to display")
+                        
+                        with tab2:
+                            st.write("### Successfully Imported Records")
+                            success_df = results_df[results_df['status'] == 'success']
+                            if not success_df.empty:
+                                success_display = success_df.copy()
+                                success_display['#'] = range(1, len(success_display) + 1)
+                                cols = ['#'] + [col for col in success_display.columns if col != '#']
+                                success_display = success_display[cols]
+                                
+                                st.dataframe(success_display, hide_index=True, use_container_width=True)
+                                
+                                # Show success summary
+                                st.info(f"**Success Summary:** {len(success_df)} records imported successfully")
+                            else:
+                                st.warning("No records were successfully imported")
+                        
+                        with tab3:
+                            st.write("### Failed Records with Reasons")
+                            failed_df = results_df[results_df['status'] == 'failed']
+                            if not failed_df.empty:
+                                failed_display = failed_df.copy()
+                                failed_display['#'] = range(1, len(failed_display) + 1)
+                                cols = ['#'] + [col for col in failed_display.columns if col != '#']
+                                failed_display = failed_display[cols]
+                                
+                                st.dataframe(failed_display, hide_index=True, use_container_width=True)
+                                
+                                # Show failure analysis
+                                st.error("### Failure Analysis")
+                                failure_reasons = failed_display['message'].value_counts()
+                                for reason, count in failure_reasons.items():
+                                    st.write(f"- **{count} records**: {reason}")
+                            else:
+                                st.success("No failed records - all imports were successful!")
+                        
+                        # Download buttons
+                        st.markdown("---")
+                        st.subheader("📥 Download Detailed Reports")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.download_button(
+                                label="Download All Results (CSV)",
+                                data=convert_df_to_csv(results_df),
+                                file_name="import_results_all.csv",
+                                mime="text/csv",
+                                key="download_all_results",
+                                help="Download complete import results with all records"
+                            )
+                        
+                        with col2:
+                            if not success_df.empty:
                                 st.download_button(
-                                    label="Download Full Results (CSV)",
-                                    data=convert_df_to_csv(results_df),
-                                    file_name="import_results_all.csv",
-                                    mime="text/csv"
+                                    label="Download Successful Only (CSV)",
+                                    data=convert_df_to_csv(success_df),
+                                    file_name="import_results_successful.csv",
+                                    mime="text/csv",
+                                    key="download_success_results",
+                                    help="Download only successfully imported records"
                                 )
-                            
-                            with col2:
+                            else:
+                                st.button(
+                                    "Download Successful Only (CSV)",
+                                    disabled=True,
+                                    help="No successful records to download"
+                                )
+                        
+                        with col3:
+                            if not failed_df.empty:
                                 st.download_button(
                                     label="Download Failed Only (CSV)",
                                     data=convert_df_to_csv(failed_df),
                                     file_name="import_results_failed.csv",
-                                    mime="text/csv"
+                                    mime="text/csv",
+                                    key="download_failed_results",
+                                    help="Download only failed records with error reasons"
                                 )
-                            #st.rerun()
-                        else:
-                            st.error(message)
+                            else:
+                                st.button(
+                                    "Download Failed Only (CSV)",
+                                    disabled=True,
+                                    help="No failed records to download"
+                                )
                             
             except Exception as e:
                 st.error(f"Error processing file: {str(e)}")
+                st.info("Please check the CSV format and try again. Make sure all required columns are present and data is properly formatted.")
 
 def convert_df_to_csv(df):
     """Convert dataframe to CSV for download"""
