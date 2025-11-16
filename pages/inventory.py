@@ -92,7 +92,8 @@ def render_inventory_page():
                 ]],
                 column_config={
                     "mustered": st.column_config.CheckboxColumn("Mustered"),
-                    "quantity": st.column_config.NumberColumn("Qty", format="%d")
+                    "quantity": st.column_config.NumberColumn("Qty", format="%.2f"),  # NEW - float with 2 decimal places
+                    "min_order_level": st.column_config.NumberColumn("Min Order Level", format="%.2f")  # Also update min_order_level if needed
                 },
                 use_container_width=True,
                 hide_index=True)
@@ -157,6 +158,10 @@ def render_inventory_page():
                         'part_number', 'name', 'quantity', 'parent_department', 'child_department', 
                         'description', 'item_denomination', 'compartment_no', 'box_no', 'ilms_code', 'min_order_level', 'barcode', 'status', 'department_id'
                     ]].copy()
+
+                    # Format quantity and min_order_level for display
+                    display_df['quantity'] = display_df['quantity'].apply(lambda x: f"{float(x):.2f}")
+                    display_df['min_order_level'] = display_df['min_order_level'].apply(lambda x: f"{float(x):.2f}")
                     
                     # Add row numbers for selection
                     display_df['row_id'] = range(len(display_df))
@@ -343,7 +348,7 @@ def render_inventory_page():
 
 
 def show_edit_form(part_data):
-    """Show edit form for selected part"""
+    """Show edit form for selected part with decimal quantity support"""
     st.subheader(f"Edit Part: {part_data['name']} ({part_data['part_number']})")
 
     # Clear selection button
@@ -387,6 +392,7 @@ def show_edit_form(part_data):
         col1, col2 = st.columns(2)
         
         with col1:
+            # Update to handle decimal quantities
             new_quantity = st.number_input(
                 "Quantity", 
                 value=float(part_data['quantity']), 
@@ -394,8 +400,20 @@ def show_edit_form(part_data):
                 step=0.1,
                 format="%.3f"
             )
-            new_min_level = st.number_input("Minimum Order Level", value=int(part_data['min_order_level']), min_value=0)
-            new_min_quantity = st.number_input("Minimum Order Quantity", value=int(part_data['min_order_quantity']), min_value=1)
+            new_min_level = st.number_input(
+                "Minimum Order Level", 
+                value=float(part_data['min_order_level']), 
+                min_value=0.0,
+                step=0.1,
+                format="%.3f"
+            )
+            new_min_quantity = st.number_input(
+                "Minimum Order Quantity", 
+                value=float(part_data['min_order_quantity']), 
+                min_value=0.1,
+                step=0.1,
+                format="%.3f"
+            )
             new_status = st.selectbox(
                 "Status*",
                 options=status_options,
@@ -415,10 +433,11 @@ def show_edit_form(part_data):
                 value=next_default_date,
                 key=f"next_maint_{part_data['part_number']}_{part_data['department_id']}"
             )
-            # Display readonly fields for information
+            # Display readonly fields for information with formatted decimal quantities
             st.text_input("Part Number", value=part_data['part_number'], disabled=True)
             st.text_input("Name", value=part_data['name'], disabled=True)
             st.text_input("Barcode", value=part_data['barcode'], disabled=True)
+            st.text_input("Current Quantity", value=f"{float(part_data['quantity']):.3f}", disabled=True)
             st.text_input("Department", value=f"{part_data['parent_department']} - {part_data['child_department']}", disabled=True)
 
         # Convert back to string for database
@@ -461,7 +480,7 @@ def show_edit_form(part_data):
                     st.error("Failed to update part. Please try again.")
 
 def update_part_by_part_number_and_department(part_number, department_id, update_data):
-    """Update part using part_number AND department_id in WHERE condition"""
+    """Update part using part_number AND department_id in WHERE condition with decimal quantity support"""
     try:
         conn = st.session_state.data_manager.conn
         cursor = conn.cursor()
@@ -472,24 +491,24 @@ def update_part_by_part_number_and_department(part_number, department_id, update
         
         if 'quantity' in update_data:
             set_clauses.append("quantity = ?")
-            params.append(int(update_data['quantity']))  # Convert to native int
+            params.append(float(update_data['quantity']))  # Convert to float for decimal quantities
         
         if 'min_order_level' in update_data:
             set_clauses.append("min_order_level = ?")
-            params.append(int(update_data['min_order_level']))  # Convert to native int
-            
+            params.append(float(update_data['min_order_level']))  # Convert to float
+        
         if 'min_order_quantity' in update_data:
             set_clauses.append("min_order_quantity = ?")
-            params.append(int(update_data['min_order_quantity']))  # Convert to native int
-            
+            params.append(float(update_data['min_order_quantity']))  # Convert to float
+        
         if 'status' in update_data:
             set_clauses.append("status = ?")
             params.append(update_data['status'])
-            
+        
         if 'last_maintenance_date' in update_data:
             set_clauses.append("last_maintenance_date = ?")
             params.append(update_data['last_maintenance_date'])
-            
+        
         if 'next_maintenance_date' in update_data:
             set_clauses.append("next_maintenance_date = ?")
             params.append(update_data['next_maintenance_date'])
