@@ -136,8 +136,24 @@ def render_inventory_page():
                         )
 
             if selected_child is not None:
-                df = st.session_state.data_manager.get_parts_by_department(selected_child)
-                st.session_state.inventory_data = df
+                # Use a cache key that includes the department to ensure proper refresh
+                cache_key = f"inventory_data_{selected_child}"
+                
+                if cache_key not in st.session_state:
+                    df = st.session_state.data_manager.get_parts_by_department(selected_child)
+                    st.session_state[cache_key] = df
+                else:
+                    df = st.session_state[cache_key]
+                
+                # Clear the cache when departments change
+                if st.session_state.get('last_dept') != selected_child:
+                    if cache_key in st.session_state:
+                        del st.session_state[cache_key]
+                    df = st.session_state.data_manager.get_parts_by_department(selected_child)
+                    st.session_state[cache_key] = df
+                    st.session_state.last_dept = selected_child
+                #df = st.session_state.data_manager.get_parts_by_department(selected_child)
+                #st.session_state.inventory_data = df
 
                 # Search and filter 
                 search_term = st.text_input("Search parts by name, description, part_number, box_no, compartment_no, ilms_code or barcode")
@@ -349,10 +365,75 @@ def render_inventory_page():
 
 def show_edit_form(part_data):
     """Show edit form for selected part with decimal quantity support"""
+    # Create unique keys for this part
+    delete_key = f"delete_{part_data['part_number']}_{part_data['department_id']}"
+    confirm_key = f"confirm_{part_data['part_number']}_{part_data['department_id']}"
+    
+    # Check if we're in delete confirmation state
+    if st.session_state.get(confirm_key, False):
+        st.subheader(f"Delete Part: {part_data['name']} ({part_data['part_number']})")
+        
+        # Check for transactions
+        conn = st.session_state.data_manager.conn
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM transactions WHERE part_id IN (SELECT id FROM spare_parts WHERE part_number = ? AND department_id = ?)",
+            (part_data['part_number'], part_data['department_id'])
+        )
+        transaction_count = cursor.fetchone()[0]
+        
+        if transaction_count > 0:
+            st.warning(f"⚠️ This part has {transaction_count} transaction(s). Deleting will remove all transaction history.")
+        else:
+            st.warning("⚠️ Are you sure you want to delete this part?")
+        
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col1:
+            if st.button("✅ Yes, Delete Part", type="primary", use_container_width=True):
+                success = delete_part(part_data)
+                if success:
+                    st.success("✅ Part deleted successfully!")
+                    # Clear all states
+                    st.session_state.selected_part = None
+                    st.session_state.selected_department_id = None
+                    if delete_key in st.session_state:
+                        del st.session_state[delete_key]
+                    if confirm_key in st.session_state:
+                        del st.session_state[confirm_key]
+                    # Clear cache
+                    cache_key = f"inventory_data_{part_data['department_id']}"
+                    if cache_key in st.session_state:
+                        del st.session_state[cache_key]
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to delete part")
+        
+        with col2:
+            if st.button("❌ Cancel", use_container_width=True):
+                # Clear confirmation state but keep selection
+                if confirm_key in st.session_state:
+                    del st.session_state[confirm_key]
+                st.rerun()
+        
+        with col3:
+            if st.button("⬅️ Back to Edit", use_container_width=True):
+                # Clear both delete and confirmation states
+                if delete_key in st.session_state:
+                    del st.session_state[delete_key]
+                if confirm_key in st.session_state:
+                    del st.session_state[confirm_key]
+                st.rerun()
+        
+        return  # Don't show edit form when in confirmation mode
+    
+    # Show the normal edit form
     st.subheader(f"Edit Part: {part_data['name']} ({part_data['part_number']})")
 
-    # Clear selection button
+    # Action buttons at the top
     col1, col2 = st.columns([1, 1])
+    
     with col1:
         if st.button("✖️ Clear Selection", use_container_width=True):
             st.session_state.selected_part = None
@@ -361,8 +442,9 @@ def show_edit_form(part_data):
     
     with col2:
         if st.button("🗑️ Delete Part", type="secondary", use_container_width=True):
-            handle_delete_part(part_data)
-    
+            st.session_state[confirm_key] = True
+            st.rerun()
+
     # Define available status options
     status_options = ["In Store", "Operational", "Under Maintenance"]
     
@@ -548,47 +630,69 @@ def update_part_by_part_number_and_department(part_number, department_id, update
 def handle_delete_part(part_data):
     """Handle part deletion with transaction check"""
     try:
-        conn = st.session_state.data_manager.conn
-        cursor = conn.cursor()
+        # Create a unique key for this delete session
+        delete_key = f"delete_{part_data['part_number']}_{part_data['department_id']}"
         
-        # Check for transactions first
-        cursor.execute(
-            "SELECT COUNT(*) FROM transactions WHERE part_id IN (SELECT id FROM spare_parts WHERE part_number = ? AND department_id = ?)",
-            (part_data['part_number'], part_data['department_id'])
-        )
-        transaction_count = cursor.fetchone()[0]
-        
-        if transaction_count > 0:
-            # If transactions exist, ask for confirmation
-            st.warning(f"⚠️ This part has {transaction_count} transaction(s) in the system. Are you sure you want to delete it? This will also remove all associated transaction history.")
+        # If delete is not yet confirmed, show confirmation
+        if not st.session_state.get(delete_key, False):
+            conn = st.session_state.data_manager.conn
+            cursor = conn.cursor()
+            
+            # Check for transactions first
+            cursor.execute(
+                "SELECT COUNT(*) FROM transactions WHERE part_id IN (SELECT id FROM spare_parts WHERE part_number = ? AND department_id = ?)",
+                (part_data['part_number'], part_data['department_id'])
+            )
+            transaction_count = cursor.fetchone()[0]
+            
+            if transaction_count > 0:
+                st.warning(f"⚠️ This part has {transaction_count} transaction(s). Deleting will remove all transaction history.")
+            else:
+                st.warning("⚠️ Are you sure you want to delete this part?")
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button(f"✅ Yes, Delete Part with {transaction_count} Transactions", type="primary", use_container_width=True):
-                    delete_part(part_data)
+                if st.button("✅ Yes, Delete Part", 
+                           type="primary", use_container_width=True,
+                           key=f"confirm_delete_{part_data['part_number']}_{part_data['department_id']}"):
+                    # Set delete state and execute deletion immediately
+                    st.session_state[delete_key] = True
+                    # Execute the deletion
+                    success = delete_part(part_data)
+                    
+                    if success:
+                        st.success("✅ Part deleted successfully!")
+                        # Clear all relevant session state
+                        st.session_state.selected_part = None
+                        st.session_state.selected_department_id = None
+                        # Clear inventory cache to force refresh
+                        cache_key = f"inventory_data_{part_data['department_id']}"
+                        if cache_key in st.session_state:
+                            del st.session_state[cache_key]
+                        # Clear delete state
+                        if delete_key in st.session_state:
+                            del st.session_state[delete_key]
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to delete part")
+                        # Clear delete state on failure
+                        if delete_key in st.session_state:
+                            del st.session_state[delete_key]
+            
             with col2:
-                if st.button("❌ Cancel Delete", use_container_width=True):
-                    st.info("Delete operation cancelled")
-                    # Optional: add a small delay and rerun to clear the confirmation
-                    time.sleep(1)
+                if st.button("❌ Cancel", use_container_width=True,
+                           key=f"cancel_delete_{part_data['part_number']}_{part_data['department_id']}"):
+                    # Clear delete state
+                    if delete_key in st.session_state:
+                        del st.session_state[delete_key]
+                    st.info("Delete cancelled")
                     st.rerun()
-        else:
-            # No transactions exist, proceed with deletion directly
-            st.warning("Are you sure you want to delete this part?")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✅ Yes, Delete Part", type="primary", use_container_width=True):
-                    delete_part(part_data)
-            with col2:
-                if st.button("❌ Cancel", use_container_width=True):
-                    st.info("Delete operation cancelled")
-            
+        
     except Exception as e:
-        st.error(f"Error checking transactions: {e}")
+        st.error(f"Error in delete process: {e}")
 
 def delete_part(part_data):
-    """Delete the selected part"""
+    """Delete the selected part and return success status"""
     try:
         conn = st.session_state.data_manager.conn
         cursor = conn.cursor()
@@ -597,48 +701,49 @@ def delete_part(part_data):
         native_part_number = str(part_data['part_number'])
         native_department_id = int(part_data['department_id'])
         
-        print(f"Deleting part: {native_part_number}, department: {native_department_id}")
+        print(f"Attempting to delete part: {native_part_number}, department: {native_department_id}")
         
-        # First get the part_id for debugging
+        # First get the part_id
         cursor.execute(
             "SELECT id FROM spare_parts WHERE part_number = ? AND department_id = ?",
             (native_part_number, native_department_id)
         )
         part_result = cursor.fetchone()
         
-        if part_result:
-            part_id = part_result[0]
-            print(f"Found part ID: {part_id}")
-            
-            # First delete transactions for this part
-            cursor.execute(
-                "DELETE FROM transactions WHERE part_id = ?",
-                (part_id,)
-            )
-            print(f"Deleted transactions for part ID: {part_id}")
-            
-            # Then delete the part
-            cursor.execute(
-                "DELETE FROM spare_parts WHERE part_number = ? AND department_id = ?",
-                (native_part_number, native_department_id)
-            )
-            
-            conn.commit()
-            st.success(f"Part '{part_data['name']}' deleted successfully!")
-            
-            # Clear selection
-            st.session_state.selected_part = None
-            st.session_state.selected_department_id = None
-            
-            time.sleep(2)
-            st.rerun()
+        if not part_result:
+            st.error("❌ Part not found in database")
+            return False
+        
+        part_id = part_result[0]
+        print(f"Found part ID: {part_id}")
+        
+        # Delete transactions first (if any)
+        cursor.execute("DELETE FROM transactions WHERE part_id = ?", (part_id,))
+        tx_deleted = cursor.rowcount
+        print(f"Deleted {tx_deleted} transactions for part ID: {part_id}")
+        
+        # Delete the part
+        cursor.execute(
+            "DELETE FROM spare_parts WHERE part_number = ? AND department_id = ?",
+            (native_part_number, native_department_id)
+        )
+        
+        deleted_rows = cursor.rowcount
+        conn.commit()
+        
+        if deleted_rows > 0:
+            print(f"✅ Successfully deleted part: {part_data['name']}")
+            return True
         else:
-            st.error("Part not found in database")
+            print("❌ No rows were deleted - part may not exist")
+            return False
             
     except Exception as e:
-        st.error(f"Error deleting part: {e}")
-        print(f"Detailed delete error: {str(e)}")
-
+        st.error(f"❌ Database error deleting part: {e}")
+        print(f"Detailed error: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
+        return False
 
     
 def generate_custom_barcode(parent_dept_name, child_dept_name, last_serial_no):
